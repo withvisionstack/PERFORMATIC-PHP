@@ -412,7 +412,7 @@ Cada worker consome ~40 MB de RAM. Sweet spot: `N = núcleos_da_CPU`.
 Cada novo projeto é um `git clone` do template:
 
 ```bash
-git clone https://github.com/seu-usuario/performatic-php-template meu-projeto
+git clone https://github.com/withvisionstack/PERFORMATIC-PHP
 cd meu-projeto
 ./install.sh
 ```
