@@ -1,6 +1,6 @@
 <p align="center">
   <img src="logo.png" alt="Performatic PHP" width="100%">
-  <img src="performatic.png"  width="100%" >
+  <img src="performatic.png"  width="90%" >
 </p>
 
 <h1 align="center">Performatic PHP</h1>
