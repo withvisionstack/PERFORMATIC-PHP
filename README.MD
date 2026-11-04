@@ -45,7 +45,7 @@ Performatic PHP é um **servidor de aplicação** que embute o motor do PHP (via
 | Requisito | Versão mínima |
 | :--- | :--- |
 | Linux | Ubuntu 22.04+, Debian 12+ |
-| PHP | 8.4+ com dev headers (`php-dev`) |
+| PHP | 8.4.x com dev headers (`php-dev`) |
 | Rust | 1.75+ |
 | libclang | `libclang-dev` (para o bindgen) |
 
