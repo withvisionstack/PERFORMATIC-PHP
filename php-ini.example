@@ -1,0 +1,8 @@
+zend.max_allowed_stack_size = -1
+extension=mysqlnd
+extension=pdo_mysql
+extension=mysqli
+extension=pdo_pgsql
+extension=pgsql
+opcache.enable=0
+opcache.enable_cli=0

@@ -1,0 +1,17 @@
+docker compose up -d postgres
+docker compose exec postgres psql -U performatic -d performatic -c "
+CREATE TABLE usuarios (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL
+);"
+
+
+Lembrar sempre de conferir se o banco esta ligado e se alguem esta executando na porta do banco
+
+Build e roda
+cargo build --release
+./target/release/php-server
+
+kill server
+
+sudo pkill -9 -f "nome da pasta"

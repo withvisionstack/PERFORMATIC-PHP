@@ -1,0 +1,10 @@
+target/
+vendor/
+.env
+.env.local
+storage/*
+*.log
+.git/
+.idea/
+.vscode/
+build.log

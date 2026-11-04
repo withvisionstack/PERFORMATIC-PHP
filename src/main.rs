@@ -1,102 +1,75 @@
-use axum::{
-    extract::State,
-    http::{Method, StatusCode},
-    response::IntoResponse,
-    Json, Router,
-};
+mod dispatch;
+mod logging;
+mod openapi;
+mod response;
+mod types;
+
+use axum::{routing::get, Router};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use ext_php_rs::embed::Embed;
-use serde::Deserialize;
-use serde_json::Value;
-use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
+use tower_http::services::ServeDir;
 
-#[derive(Clone, Debug, Deserialize)]
-struct RouteDef {
-    method: String,
-    path: String,
-    handler: String,
-}
+use dispatch::dispatch;
+use openapi::{docs_html, docs_json};
+use types::{AppState, Job, RouteDef, SchemaDef, SecuritySchemeDef};
 
-struct Job {
-    handler: String,
-    args_php: String,
-    body: Vec<u8>,
-    query: String,
-    headers: Vec<(String, String)>,
-    method: String,
-    respond_to: oneshot::Sender<Result<String, String>>,
-}
 
-// ← NOVO: entrada de cache
-struct CacheEntry {
-    body: String,
-    expires_at: Instant,
-}
-
-struct AppState {
-    routes: Vec<RouteDef>,
-    php_tx: mpsc::Sender<Job>,
-    cache: Mutex<HashMap<String, CacheEntry>>,   // ← NOVO
-}
-
-/// Quanto tempo o cache dura (em segundos).
-/// Ajuste por endpoint se necessário.
-const CACHE_TTL_SECS: u64 = 60;
-
-/// Endpoints que NÃO devem ser cacheados (POST, autenticação, etc).
-/// Comparação exata com `path`.
-fn is_cacheable(method: &str, path: &str) -> bool {
-    if method != "GET" {
-        return false;
-    }
-    // Lista negra: rotas que nunca devem ser cacheadas
-    const NEVER_CACHE: &[&str] = &["/me", "/headers", "/diag", "/ini", "/routes", "/ping"];
-    !NEVER_CACHE.contains(&path)
-}
 
 fn main() {
-    // Caminho ABSOLUTO para o php.ini (evita depender do cwd)
-    let cwd = std::env::current_dir().expect("cwd");
-    std::env::set_var("PHPRC", cwd.join("php.ini"));
+    //let cwd = std::env::current_dir().expect("cwd");
+    //std::env::set_var("PHPRC", cwd.join("php.ini"));
+    //std::env::set_var("PHP_INI_SCAN_DIR", "");   // ← NOVO: não escaneia conf.d
     dotenvy::dotenv().ok();
 
     // ---------------------------------------------------------------------
-    // 1. Ler rotas em uma thread temporária (inicialização única)
+    // 1. Ler rotas
     // ---------------------------------------------------------------------
-    let routes = {
+    let (routes, schemas, security_schemes) = {
         let (tx, rx) = std::sync::mpsc::channel();
         thread::Builder::new()
             .stack_size(8 * 1024 * 1024)
             .spawn(move || {
                 Embed::run(|| {
-                    Embed::run_script("api/routes.php").expect("routes.php (startup)");
-                    let json = Embed::eval("json_encode(get_routes());")
-                        .expect("json_encode(get_routes)")
+                    Embed::run_script("api/routes.php").expect("routes.php");
+                    let routes_json = Embed::eval("json_encode(get_routes());")
+                        .expect("get_routes")
                         .string()
-                        .expect("json_encode(get_routes) não retornou string");
-                    let routes: Vec<RouteDef> =
-                        serde_json::from_str(&json).expect("json inválido");
-                    tx.send(routes).ok();
+                        .expect("get_routes string");
+                    let schemas_json = Embed::eval("json_encode(get_schemas());")
+                        .expect("get_schemas")
+                        .string()
+                        .expect("get_schemas string");
+                    let security_json = Embed::eval("json_encode(get_security_schemes());")
+                        .expect("get_security_schemes")
+                        .string()
+                        .expect("get_security_schemes string");
+                    tx.send((routes_json, schemas_json, security_json)).ok();
                 });
             })
             .unwrap()
             .join()
             .unwrap();
-        rx.recv().unwrap()
+        let (r, s, sec) = rx.recv().unwrap();
+        (
+            serde_json::from_str::<Vec<RouteDef>>(&r).expect("json rotas"),
+            serde_json::from_str::<Vec<SchemaDef>>(&s).expect("json schemas"),
+            serde_json::from_str::<Vec<SecuritySchemeDef>>(&sec).expect("json security"),
+        )
     };
 
-    println!("📋 {} rotas carregadas:", routes.len());
-    for r in &routes {
-        println!("   {} {}", r.method, r.path);
-    }
+    println!(
+        "📋 {} rotas, {} schemas, {} schemes",
+        routes.len(),
+        schemas.len(),
+        security_schemes.len()
+    );
 
     // ---------------------------------------------------------------------
-    // 2. Worker PHP único com canal async
+    // 2. Worker PHP
     // ---------------------------------------------------------------------
     let (php_tx, mut php_rx) = mpsc::channel::<Job>(10000);
 
@@ -108,14 +81,44 @@ fn main() {
                 eprintln!("✅ PHP worker pronto");
 
                 while let Some(job) = php_rx.blocking_recv() {
-                    // ZERA $_SERVER inteiro e seta REQUEST_METHOD + headers
+                    let is_multipart = job.headers.iter().any(|(k, v)| {
+                        k.eq_ignore_ascii_case("content-type")
+                            && v.to_lowercase().contains("multipart/form-data")
+                    });
+
+                    let multipart_call = if is_multipart {
+                        "multipart_parse(); "
+                    } else {
+                        ""
+                    };
+
+                    let b64_body = B64.encode(&job.body);
+                    let b64_query = B64.encode(job.query.as_bytes());
+                    let b64_method = B64.encode(job.method.as_bytes());
+                    let b64_cookies = B64.encode(job.cookies.as_bytes());       // ← NOVO
+
                     let headers_php: String = {
-                        let mut s = format!(
-                            "$_SERVER = []; $_SERVER['REQUEST_METHOD'] = '{}'; ",
-                            job.method
+                        let mut s = String::from(
+                            "$_SERVER = []; $_SERVER['REQUEST_METHOD'] = $GLOBALS['__method']; ",
                         );
                         for (k, v) in &job.headers {
-                            let key = k.to_uppercase().replace('-', "_");
+                            let key: String = k
+                                .chars()
+                                .filter_map(|c| {
+                                    if c.is_ascii_alphanumeric() {
+                                        Some(c.to_ascii_uppercase())
+                                    } else if c == '-' {
+                                        Some('_')
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+
+                            if key.is_empty() {
+                                continue;
+                            }
+
                             let b64_val = B64.encode(v.as_bytes());
                             s.push_str(&format!(
                                 "$_SERVER['HTTP_{}'] = base64_decode('{}'); ",
@@ -125,40 +128,31 @@ fn main() {
                         s
                     };
 
-                    let b64_query = B64.encode(job.query.as_bytes());
-
-                    let code = if job.body.is_empty() {
-                        format!(
-                            "(function() {{ \
-                                $_GET = []; \
-                                parse_str(base64_decode('{b64_query}'), $_GET); \
-                                {headers_php} \
-                                return {handler}({args}); \
-                            }})();",
-                            b64_query = b64_query,
-                            headers_php = headers_php,
-                            handler = job.handler,
-                            args = job.args_php
-                        )
-                    } else {
-                        let b64_body = B64.encode(&job.body);
-                        format!(
-                            "(function() {{ \
-                                $GLOBALS['__body'] = base64_decode('{b64_body}'); \
-                                $GLOBALS['__method'] = '{method}'; \
-                                $_GET = []; \
-                                parse_str(base64_decode('{b64_query}'), $_GET); \
-                                {headers_php} \
-                                return {handler}({args}); \
-                            }})();",
-                            b64_body = b64_body,
-                            b64_query = b64_query,
-                            method = job.method,
-                            headers_php = headers_php,
-                            handler = job.handler,
-                            args = job.args_php
-                        )
-                    };
+                   let code = format!(
+                       "(function() {{ \
+                           $GLOBALS['__body'] = base64_decode('{b64_body}'); \
+                           $GLOBALS['__method'] = base64_decode('{b64_method}'); \
+                           $GLOBALS['__files'] = []; \
+                           $GLOBALS['__cookies'] = []; \
+                           $_GET = []; \
+                           $_POST = []; \
+                           $_COOKIE = []; \
+                           $_SERVER = []; \
+                           parse_str(base64_decode('{b64_query}'), $_GET); \
+                           parse_str(base64_decode('{b64_cookies}'), $_COOKIE); \
+                           {headers_php} \
+                           {multipart_call} \
+                           return {handler}({args}); \
+                       }})();",
+                        b64_body = b64_body,
+                        b64_method = b64_method,
+                        b64_query = b64_query,
+                        b64_cookies = b64_cookies,
+                        headers_php = headers_php,
+                        multipart_call = multipart_call,
+                        handler = job.handler,
+                        args = job.args_php
+                    );
 
                     let result = match Embed::eval(&code) {
                         Ok(z) => match z.string() {
@@ -178,7 +172,7 @@ fn main() {
     // 3. Servidor Axum
     // ---------------------------------------------------------------------
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(8)   // subimos de 4 para 8 para melhor accept loop
+        .worker_threads(8)
         .enable_all()
         .build()
         .unwrap();
@@ -186,158 +180,64 @@ fn main() {
     rt.block_on(async move {
         let state = Arc::new(AppState {
             routes,
+            schemas,
+            security_schemes,
             php_tx,
-            cache: Mutex::new(HashMap::new()),   // ← NOVO
+            cache: std::sync::Mutex::new(std::collections::HashMap::new()),
         });
-        let app = Router::new().fallback(dispatch).with_state(state);
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:7600")
+        let app = Router::new()
+            .route("/docs", get(docs_html))
+            .route("/docs.json", get(docs_json))
+            .nest_service("/assets", ServeDir::new("assets"))
+            .fallback(dispatch)
+            .with_state(state);
+
+        // Aceita PORT do ambiente (útil para N workers)
+        let port: u16 = std::env::var("PORT")
+            .unwrap_or_else(|_| "7600".to_string())
+            .parse()
+            .unwrap_or(7600);
+
+        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
             .await
             .unwrap();
-        println!("🚀 Servidor ouvindo em http://localhost:7600");
-        axum::serve(listener, app).await.unwrap();
+        println!("🚀 Servidor ouvindo em http://localhost:{}", port);
+
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .unwrap();
+
+        println!("\x1b[32m✓ Servidor encerrado graciosamente\x1b[0m");
     });
-}
 
-/// Converte um parâmetro de rota em literal PHP seguro.
-fn php_literal(p: &str) -> String {
-    match p.parse::<i64>() {
-        Ok(n) if n.to_string() == p => p.to_string(),
-        _ => format!("'{}'", p.replace('\\', "\\\\").replace('\'', "\\'")),
-    }
-}
+    async fn shutdown_signal() {
+        let ctrl_c = async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Falha ao instalar handler de Ctrl+C");
+        };
 
-async fn dispatch(
-    State(state): State<Arc<AppState>>,
-    method: Method,
-    uri: axum::http::Uri,
-    headers: axum::http::HeaderMap,
-    body: axum::body::Bytes,
-) -> impl IntoResponse {
-    let path = uri.path().to_string();
-    let method_str = method.as_str().to_string();
-    let query = uri.query().unwrap_or("").to_string();
+        #[cfg(unix)]
+        let terminate = async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("Falha ao instalar handler de SIGTERM")
+                .recv()
+                .await;
+        };
 
-    // ------------------------------------------------------------------
-    // ← NOVO: Verificar cache antes de chamar o PHP
-    // ------------------------------------------------------------------
-    let cache_key = format!("{}:{}?{}", method_str, path, query);
+        #[cfg(not(unix))]
+        let terminate = std::future::pending::<()>();
 
-    if is_cacheable(&method_str, &path) {
-        let cache = state.cache.lock().unwrap();
-        if let Some(entry) = cache.get(&cache_key) {
-            if entry.expires_at > Instant::now() {
-                if let Ok(v) = serde_json::from_str::<Value>(&entry.body) {
-                    return (StatusCode::OK, Json(v)).into_response();
-                }
-                return (StatusCode::OK, entry.body.clone()).into_response();
-            }
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = terminate => {},
         }
+
+        eprintln!("\n\x1b[33m⚠ Sinal de shutdown recebido. Aguardando requisições em andamento...\x1b[0m");
     }
 
-    // ------------------------------------------------------------------
-    // Encontrar a rota
-    // ------------------------------------------------------------------
-    let mut matched: Option<(&RouteDef, Vec<String>)> = None;
-    for route in &state.routes {
-        if route.method != method_str {
-            continue;
-        }
-        if let Some(params) = match_path(&route.path, &path) {
-            matched = Some((route, params));
-            break;
-        }
-    }
 
-    let (route, params) = match matched {
-        Some(m) => m,
-        None => return (StatusCode::NOT_FOUND, "Rota não encontrada").into_response(),
-    };
 
-    let args_php = params
-        .iter()
-        .map(|p| php_literal(p))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let headers_vec: Vec<(String, String)> = headers
-        .iter()
-        .filter_map(|(k, v)| {
-            v.to_str()
-                .ok()
-                .map(|v| (k.as_str().to_string(), v.to_string()))
-        })
-        .collect();
-
-    let (resp_tx, resp_rx) = oneshot::channel();
-    if state
-        .php_tx
-        .send(Job {
-            handler: route.handler.clone(),
-            args_php,
-            body: body.to_vec(),
-            query,
-            headers: headers_vec,
-            method: method_str.clone(),
-            respond_to: resp_tx,
-        })
-        .await
-        .is_err()
-    {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "PHP worker indisponível").into_response();
-    }
-
-    let result = match resp_rx.await {
-        Ok(Ok(s)) if s.is_empty() => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "PHP retornou vazio (erro fatal — ver log do servidor)",
-            )
-                .into_response();
-        }
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, format!("Erro PHP: {}", e)).into_response();
-        }
-        Err(_) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Worker caiu").into_response();
-        }
-    };
-
-    // ------------------------------------------------------------------
-    // ← NOVO: Guardar no cache após resposta bem-sucedida
-    // ------------------------------------------------------------------
-    if is_cacheable(&method_str, &path) && !result.is_empty() {
-        let mut cache = state.cache.lock().unwrap();
-        cache.insert(
-            cache_key,
-            CacheEntry {
-                body: result.clone(),
-                expires_at: Instant::now() + Duration::from_secs(CACHE_TTL_SECS),
-            },
-        );
-    }
-
-    if let Ok(v) = serde_json::from_str::<Value>(&result) {
-        (StatusCode::OK, Json(v)).into_response()
-    } else {
-        (StatusCode::OK, result).into_response()
-    }
-}
-
-fn match_path(pattern: &str, actual: &str) -> Option<Vec<String>> {
-    let pat: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-    let act: Vec<&str> = actual.split('/').filter(|s| !s.is_empty()).collect();
-    if pat.len() != act.len() {
-        return None;
-    }
-    let mut params = Vec::new();
-    for (p, a) in pat.iter().zip(act.iter()) {
-        if p.starts_with('{') && p.ends_with('}') {
-            params.push(a.to_string());
-        } else if p != a {
-            return None;
-        }
-    }
-    Some(params)
 }

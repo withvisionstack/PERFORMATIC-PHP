@@ -43,7 +43,6 @@ function http_parallel(array $urls, int $timeout = 10): array
         }
 
         curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
     }
 
     curl_multi_close($mh);

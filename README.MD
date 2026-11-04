@@ -1,467 +1,557 @@
 <p align="center">
-  <img src="logo.png" alt="Performatic PHP" width="100%">
-  <img src="performatic.png"  height="50%" width="70%" >
+  <img src="assets/performatic.png" alt="Performatic PHP" width="400">
 </p>
 
 <h1 align="center">Performatic PHP</h1>
 
 <p align="center">
-  Framework minimalista: <strong>PHP procedural</strong> com <strong>motor em Rust</strong>.
+  <strong>API em PHP procedural. Motor em Rust. Sem Laravel.</strong>
   <br>
-  Sem FPM. Sem Apache. Sem OOP forçada. Binário único.
-</p>
-
-<p align="center">
-  <a href="#instalação">Instalação</a> •
-  <a href="#primeiros-passos">Primeiros passos</a> •
-  <a href="#sintaxe">Sintaxe</a> •
-  <a href="#helpers">Helpers</a> •
-  <a href="#exemplos">Exemplos</a> •
-  <a href="#performance">Performance</a> •
-  <a href="#distribuição">Distribuição</a>
+  <code>#[Get('/users')]</code> · <code>body()</code> · <code>db()</code> · <code>http(404, ...)</code>
+  <br>
+  <sub>OpenAPI automático · JWT · PostgreSQL · Cache in-memory · Multipart upload</sub>
 </p>
 
 ---
 
-## O que é?
+## Por que existe
 
-Performatic PHP é um **servidor de aplicação** que embute o motor do PHP (via `libphp`) em um binário Rust. Ele substitui Nginx + PHP-FPM por **um único processo** que:
+Você já sabe PHP. Você já sabe SQL. Não precisa aprender Eloquent, Blade, Artisan, Facades ou container DI para fazer uma API.
 
-- ✅ Executa PHP **procedural**, sem controllers ou classes obrigatórias
-- ✅ Usa **atributos** (`#[Get]`, `#[Post]`) para declarar rotas
-- ✅ Mantém o motor PHP **quente** entre requisições (sem bootstrap por request)
-- ✅ Suporta `GET`, `POST`, query string, headers, JSON, autenticação Bearer
-- ✅ Tem **cache in-memory** configurável por endpoint
-- ✅ Entrega **~57.000 req/s** em endpoint trivial (vs ~350 do Laravel)
+**Performatic PHP** é PHP procedural puro com um motor em Rust. Você escreve funções, o framework cuida do HTTP.
 
-**Não é** um framework MVC. **Não tem** ORM. **Não tem** container de DI. Você escreve funções PHP e o framework cuida do HTTP.
+```php
+#[Get('/usuarios/{id}')]
+function buscar(int $id): string
+{
+    $user = db_query('SELECT * FROM usuarios WHERE id = ?', [$id]);
+    return empty($user) ? http(404, ['erro' => 'não encontrado']) : http(200, $user[0]);
+}
+```
+
+Isso é tudo. Swagger em `/docs`, JWT em `/login`, cache automático, upload — sem framework pesado.
 
 ---
 
 ## Instalação
 
-### Requisitos
-
-| Requisito | Versão mínima |
-| :--- | :--- |
-| Linux | Ubuntu 22.04+, Debian 12+ |
-| PHP | 8.5.x com dev headers (`php-dev`) |
-| Rust | 1.75+ |
-| libclang | `libclang-dev` (para o bindgen) |
-
-### Passo a passo (Ubuntu/Debian)
+### Docker (recomendado)
 
 ```bash
-# 1. Dependências do sistema
-sudo apt update
-sudo apt install -y \
-  php-dev php8.5-curl php8.5-fpm \
-  libclang-dev build-essential pkg-config curl git
-
-# 2. Rust (se não tiver)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-
-# 3. Clone o template
-git clone https://github.com/withvisionstack/PERFORMATIC-PHP
+git clone https://github.com/withvisionstack/PERFORMATIC-PHP meu-projeto
 cd meu-projeto
-
-# 4. Configure o .env
 cp .env.example .env
-nano .env
-
-# 5. Compile
-cargo build --release
-
-# 6. Rode
-./target/release/php-server
+docker compose up -d --build
 ```
 
-Acesse `http://localhost:7600/ping` — deve retornar `{"pong":true,"ts":...}`.
+Teste:
+```bash
+curl http://localhost:8000/ping
+# {"pong":true,"ts":...}
 
-### Instalação via Docker
+# Swagger
+open http://localhost:8000/docs
+```
+
+### VPS (Ubuntu/Debian, sem Docker)
 
 ```bash
-docker build -t performatic-php .
-docker run -p 7600:7600 --env-file .env performatic-php
+git clone https://github.com/withvisionstack/PERFORMATIC-PHP meu-projeto
+cd meu-projeto
+./install.sh
+cargo run --release
 ```
+
+O `install.sh` instala PHP, Rust, dependências do sistema, cria `.env` e compila.
+
+### Requisitos (se instalar manualmente)
+
+- Linux (Ubuntu 22.04+, Debian 12+)
+- Rust 1.85+
+- PHP 8.4+ com `php-dev`, `php-curl`, `php-pgsql` (ou `php-mysql`)
+- `libclang-dev`, `build-essential`, `pkg-config`
 
 ---
 
-## Primeiros passos
+## Sua primeira rota
 
-### Estrutura do projeto
-
-```
-meu-projeto/
-├── src/main.rs              ← motor (não editar)
-├── Cargo.toml               ← dependências (não editar)
-├── php.ini                  ← config do PHP (não editar)
-├── .env                     ← ★ SUAS VARIÁVEIS
-├── api/
-│   ├── attributes.php       ← atributos #[Get], #[Post] (não editar)
-│   ├── http.php             ← http_parallel() (não editar)
-│   └── routes.php           ← ★ SUAS ROTAS
-└── app/
-    └── config.php           ← carrega .env (não editar)
-```
-
-**Só dois arquivos importam para você**: `api/routes.php` (suas rotas) e `.env` (configuração).
-
-### Sua primeira rota
-
-Edite `api/routes.php`:
+Edite `api/routes/produtos.php` (crie se não existir):
 
 ```php
 <?php
-require_once __DIR__ . '/attributes.php';
-require_once __DIR__ . '/http.php';
-require_once __DIR__ . '/../app/config.php';
 
-#[Get('/ola')]
-function ola(): string {
-    return json_response(['msg' => 'Olá do Performatic PHP!']);
+#[Get('/produtos', summary: 'Lista produtos', tags: ['produtos'])]
+function listar_produtos(): string
+{
+    $produtos = db_query('SELECT id, nome, preco FROM produtos LIMIT 20');
+    return http(200, ['produtos' => $produtos, 'total' => count($produtos)]);
 }
 ```
 
-Reinicie o servidor (`cargo run --release`) e acesse `http://localhost:7600/ola`.
+Registre no `api/routes.php`:
+
+```php
+require_once __DIR__ . '/routes/produtos.php';
+```
+
+Crie a tabela:
+
+```bash
+docker compose exec postgres psql -U performatic -d performatic -c "
+CREATE TABLE produtos (
+    id SERIAL PRIMARY KEY,
+    nome TEXT NOT NULL,
+    preco NUMERIC(10,2) NOT NULL
+);
+INSERT INTO produtos (nome, preco) VALUES ('Caneta', 2.50), ('Caderno', 15.00);
+"
+```
+
+Teste:
+
+```bash
+curl http://localhost:8000/produtos | jq
+# {"produtos":[{"id":1,"nome":"Caneta","preco":"2.50"},{"id":2,"nome":"Caderno","preco":"15.00"}],"total":2}
+```
+
+**Pronto.** Swagger em `/docs` já documenta automaticamente.
 
 ---
 
 ## Sintaxe
 
-### Rotas GET
+### Roteamento
 
 ```php
-#[Get('/usuarios')]
-function listar_usuarios(): string {
-    return json_response(['usuarios' => ['Alice', 'Bob']]);
-}
+#[Get('/caminho')]              // GET
+#[Post('/caminho')]             // POST
+#[Put('/caminho')]              // PUT
+#[Patch('/caminho')]            // PATCH
+#[Delete('/caminho')]           // DELETE
+
+#[Get('/usuarios/{id}')]        // parâmetro de URL
+function buscar(int $id): string { /* $id já vem como int */ }
 ```
-
-### Rotas GET com parâmetros de URL
-
-```php
-#[Get('/usuarios/{id}')]
-function mostrar_usuario(int $id): string {
-    return json_response(['id' => $id, 'nome' => 'Alice']);
-}
-// GET /usuarios/42 → $id = 42 (int, convertido automaticamente)
-```
-
-### Rotas GET com query string
-
-```php
-#[Get('/produtos')]
-function listar_produtos(): string {
-    $page  = (int) query('page', 1);
-    $limit = (int) query('limit', 20);
-    $busca = query('q', '');
-
-    return json_response([
-        'page'  => $page,
-        'limit' => $limit,
-        'q'     => $busca,
-    ]);
-}
-// GET /produtos?page=2&limit=10&q=notebook
-```
-
-### Rotas POST com body JSON
-
-```php
-#[Post('/usuarios')]
-function criar_usuario(): string {
-    $dados = body();
-
-    if (empty($dados['nome'])) {
-        return json_response(['erro' => 'nome obrigatório']);
-    }
-
-    // INSERT INTO usuarios ...
-    return json_response(['id' => 1, 'nome' => $dados['nome']]);
-}
-// POST /usuarios
-// Body: {"nome":"Felipe"}
-```
-
-### Rotas com autenticação
-
-```php
-#[Post('/pedidos')]
-function criar_pedido(): string {
-    $token = bearer_token();
-    if ($token === null) {
-        return json_response(['erro' => 'não autenticado']);
-    }
-
-    $dados = body();
-    return json_response(['pedido_id' => 123, 'dados' => $dados]);
-}
-// POST /pedidos
-// Header: Authorization: Bearer <token>
-```
-
----
-
-## Helpers
-
-Todos os helpers são **funções PHP procedurais**. Nada de classes, nada de `$this`.
 
 ### Leitura de request
 
-| Helper | Retorno | Uso |
+| Helper | Retorno | Exemplo |
 | :--- | :--- | :--- |
-| `body()` | `array` | Corpo JSON parseado (retorna `[]` se vazio) |
-| `raw_body()` | `string` | Corpo cru (útil para XML, form, etc) |
-| `method()` | `string` | Método HTTP (`GET`, `POST`, etc) |
-| `query($key, $default)` | `mixed` | Parâmetro da query string |
-| `header($name, $default)` | `?string` | Header HTTP |
-| `bearer_token()` | `?string` | Extrai `Bearer <token>` do `Authorization` |
-| `is_json_request()` | `bool` | `Content-Type` contém `application/json` |
+| `body()` | `array` | `$dados = body();` |
+| `raw_body()` | `string` | `$xml = raw_body();` |
+| `method()` | `string` | `if (method() === 'POST')` |
+| `query($key, $default)` | `mixed` | `$page = (int) query('page', 1);` |
+| `header($name, $default)` | `?string` | `header('User-Agent')` |
+| `bearer_token()` | `?string` | `bearer_token()` |
+| `current_user()` | `?array` | `current_user()` |
 
 ### Escrita de response
 
-| Helper | Uso |
-| :--- | :--- |
-| `json_response($array)` | Serializa array em JSON com flags corretas |
+| Helper | Status | Uso |
+| :--- | :--- | :--- |
+| `json_response($array)` | 200 | `return json_response([...]);` |
+| `http($status, $array)` | custom | `return http(201, ['id' => 1]);` |
+| `http($status, ['erro' => '...'])` | custom | `return http(400, ['erro' => 'inválido']);` |
 
-### HTTP externo
+**Status comuns**: 200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500.
 
-| Helper | Uso |
-| :--- | :--- |
-| `http_parallel($urls, $timeout)` | Dispara N `GET` em paralelo e retorna os corpos |
+### Banco de dados
 
 ```php
-$respostas = http_parallel([
-    'https://api1.com/dados',
-    'https://api2.com/dados',
-]);
-// $respostas[0] = corpo da primeira URL
-// $respostas[1] = corpo da segunda
+// SELECT (retorna array)
+$rows = db_query('SELECT * FROM produtos WHERE preco > ?', [100]);
+
+// INSERT
+$pdo = db();
+$stmt = $pdo->prepare('INSERT INTO produtos (nome, preco) VALUES (?, ?)');
+$stmt->execute(['Caneta', 2.50]);
+$id = (int) $pdo->lastInsertId();
+
+// UPDATE
+$pdo->prepare('UPDATE produtos SET preco = ? WHERE id = ?')->execute([3.00, $id]);
+
+// DELETE
+$pdo->prepare('DELETE FROM produtos WHERE id = ?')->execute([$id]);
+
+// Transação
+$pdo->beginTransaction();
+try {
+    // ...
+    $pdo->commit();
+} catch (Throwable $e) {
+    $pdo->rollBack();
+    throw $e;
+}
+```
+
+### Autenticação JWT
+
+```php
+#[Post('/login', tags: ['auth'])]
+#[Body('LoginRequest', example: ['email' => 'user@test.com', 'senha' => '123456'])]
+#[Response(200, 'Autenticado')]
+#[Response(401, 'Credenciais inválidas')]
+function login(): string
+{
+    $dados = body();
+    $stmt = db()->prepare('SELECT id, senha_hash FROM usuarios WHERE email = ?');
+    $stmt->execute([$dados['email'] ?? '']);
+    $user = $stmt->fetch();
+
+    if (!$user || !password_verify($dados['senha'] ?? '', $user['senha_hash'])) {
+        return http(401, ['erro' => 'credenciais inválidas']);
+    }
+
+    $token = jwt_encode(['user_id' => $user['id'], 'email' => $dados['email']]);
+    set_cookie('auth_token', $token, ['expires' => time() + 3600]);
+
+    return http(200, ['token' => $token]);
+}
+
+#[Get('/me', tags: ['auth'])]
+#[Security('BearerAuth')]
+#[Response(200, 'OK')]
+#[Response(401, 'Não autenticado')]
+function me(): string
+{
+    $user = current_user();  // funciona com Bearer OU Cookie
+    return $user === null ? http(401, ['erro' => 'não autenticado']) : http(200, $user);
+}
+```
+
+**Cliente SPA/mobile**:
+```javascript
+fetch('/me', { headers: { Authorization: `Bearer ${token}` } })
+```
+
+**Cliente browser** (cookie HttpOnly, sem JS acessível):
+```javascript
+fetch('/me', { credentials: 'include' })
+```
+
+### Upload de arquivos
+
+```php
+#[Post('/upload', tags: ['arquivos'])]
+#[Response(201, 'Salvo')]
+#[Response(413, 'Arquivo grande')]
+function upload(): string
+{
+    $info = file_info('arquivo');
+    if ($info === null) return http(400, ['erro' => 'arquivo obrigatório']);
+    if ($info['size'] > 2 * 1024 * 1024) return http(413, ['erro' => 'máx 2MB']);
+
+    $path = file_save('arquivo', __DIR__ . '/../storage');
+    return http(201, ['path' => basename($path), 'size' => $info['size']]);
+}
+```
+
+```bash
+curl -X POST http://localhost:8000/upload -F "arquivo=@foto.jpg"
+```
+
+### HTTP paralelo (API externa)
+
+```php
+#[Get('/clima')]
+function clima(): string
+{
+    $urls = [
+        'https://api.clima.com/sao-paulo',
+        'https://api.clima.com/curitiba',
+    ];
+    $respostas = http_parallel($urls);  // dispara as 2 em paralelo
+    return http(200, ['dados' => array_map('json_decode', $respostas)]);
+}
 ```
 
 ---
 
-## Exemplos
+## OpenAPI automático
 
-### CRUD de usuários
+Todo endpoint anotado aparece no Swagger em `/docs`.
 
 ```php
-#[Get('/usuarios')]
-function listar(): string {
-    $page  = (int) query('page', 1);
-    $limit = (int) query('limit', 20);
+#[Post('/produtos',
+    summary: 'Cria produto',
+    description: 'Adiciona um produto ao catálogo',
+    tags: ['produtos'])]
+#[Body('ProdutoRequest', example: ['nome' => 'Caneta', 'preco' => 2.50])]
+#[Response(201, 'Criado', schema: 'Produto')]
+#[Response(400, 'Dados inválidos')]
+#[Security('BearerAuth')]
+function criar(): string { /* ... */ }
+```
 
-    $pdo = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASS'));
-    $stmt = $pdo->prepare(
-        'SELECT * FROM usuarios LIMIT :limit OFFSET :offset'
-    );
-    $stmt->bindValue(':limit',  $limit, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
-    $stmt->execute();
+Schemas em `api/schemas.php`:
 
-    return json_response([
-        'usuarios' => $stmt->fetchAll(PDO::FETCH_ASSOC),
-        'page'     => $page,
-        'limit'    => $limit,
-    ]);
-}
+```php
+#[Schema('ProdutoRequest', [
+    'nome'  => 'string',
+    'preco' => 'float',
+], required: ['nome', 'preco'])]
+function __schema_produto_request() {}
 
-#[Get('/usuarios/{id}')]
-function mostrar(int $id): string {
-    $pdo = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASS'));
-    $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE id = ?');
-    $stmt->execute([$id]);
-    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+#[Schema('Produto', [
+    'id'    => 'int',
+    'nome'  => 'string',
+    'preco' => 'float',
+])]
+function __schema_produto() {}
+```
 
-    if (!$usuario) {
-        return json_response(['erro' => 'não encontrado']);
+Security schemes em `api/security.php`:
+
+```php
+#[SecurityScheme('BearerAuth', 'http', 'bearer', 'JWT')]
+function __security_bearer() {}
+```
+
+Acesse `http://localhost:8000/docs` → Swagger UI interativa, com botão "Authorize" e "Try it out".
+
+---
+
+## Estrutura de projeto recomendada
+
+```
+meu-projeto/
+├── src/                       ← motor Rust (não editar)
+├── api/
+│   ├── routes/
+│   │   ├── auth.php           ← /login, /register, /me
+│   │   ├── usuarios.php       ← CRUD usuarios
+│   │   ├── produtos.php       ← CRUD produtos
+│   │   └── pedidos.php        ← CRUD pedidos
+│   ├── routes.php             ← entrypoint (só requires)
+│   ├── schemas.php            ← schemas OpenAPI
+│   ├── security.php           ← schemes de auth
+│   ├── attributes.php         ← #[Get], #[Post], etc (não editar)
+│   ├── http.php               ← http_parallel (não editar)
+│   ├── cookies.php            ← set_cookie (não editar)
+│   ├── jwt.php                ← jwt_encode/decode (não editar)
+│   ├── multipart.php          ← upload (não editar)
+│   └── db.php                 ← PDO helpers (não editar)
+├── db/
+│   └── init.sql               ← schema inicial
+├── app/
+│   └── config.php             ← carrega .env (não editar)
+├── storage/                   ← uploads (git-ignored)
+├── nginx/
+│   └── nginx.conf
+├── .env                       ← configuração (git-ignored)
+├── .env.example
+├── docker-compose.yml
+├── Dockerfile
+├── Cargo.toml
+├── composer.json
+└── README.md
+```
+
+**Divida por domínio** quando passar de 20 rotas. Cada arquivo em `api/routes/` é independente.
+
+---
+
+## Pacotes recomendados (Packagist)
+
+| Pacote | Uso | Instalação |
+| :--- | :--- | :--- |
+| **`firebase/php-jwt`** | JWT (já instalado) | `composer require firebase/php-jwt` |
+| **`robmorgan/phinx`** | Migrations | `composer require robmorgan/phinx` |
+| **`monolog/monolog`** | Logs estruturados | `composer require monolog/monolog` |
+| **`ramsey/uuid`** | UUIDs | `composer require ramsey/uuid` |
+| **`guzzlehttp/guzzle`** | HTTP client (se não quiser `http_parallel`) | `composer require guzzlehttp/guzzle` |
+| **`stripe/stripe-php`** | Pagamentos | `composer require stripe/stripe-php` |
+| **`phpmailer/phpmailer`** | E-mail SMTP | `composer require phpmailer/phpmailer` |
+
+**NÃO use**: `illuminate/database` (Eloquent), `doctrine/orm`, `symfony/console`, `laravel/framework` — todos trazem peso e paradigma OOP que contradizem o framework.
+
+---
+
+## Migrations (Phinx)
+
+```bash
+composer require robmorgan/phinx
+vendor/bin/phinx init
+vendor/bin/phinx create CreateProdutos
+```
+
+`db/migrations/20260101000000_create_produtos.php`:
+
+```php
+<?php
+use Phinx\Migration\AbstractMigration;
+
+class CreateProdutos extends AbstractMigration
+{
+    public function change(): void
+    {
+        $this->table('produtos')
+            ->addColumn('nome', 'string', ['limit' => 200])
+            ->addColumn('preco', 'decimal', ['precision' => 10, 'scale' => 2])
+            ->addTimestamps()
+            ->create();
     }
-    return json_response($usuario);
-}
-
-#[Post('/usuarios')]
-function criar(): string {
-    $dados = body();
-
-    if (empty($dados['nome']) || empty($dados['email'])) {
-        return json_response(['erro' => 'nome e email obrigatórios']);
-    }
-
-    $pdo = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASS'));
-    $stmt = $pdo->prepare(
-        'INSERT INTO usuarios (nome, email) VALUES (?, ?)'
-    );
-    $stmt->execute([$dados['nome'], $dados['email']]);
-
-    return json_response([
-        'id'   => (int) $pdo->lastInsertId(),
-        'nome' => $dados['nome'],
-    ]);
 }
 ```
 
-### Login + JWT
-
-```php
-#[Post('/login')]
-function login(): string {
-    $dados = body();
-    $email = $dados['email'] ?? '';
-    $senha = $dados['senha'] ?? '';
-
-    $pdo = new PDO(getenv('DB_DSN'), getenv('DB_USER'), getenv('DB_PASS'));
-    $stmt = $pdo->prepare('SELECT * FROM usuarios WHERE email = ?');
-    $stmt->execute([$email]);
-    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$usuario || !password_verify($senha, $usuario['senha_hash'])) {
-        return json_response(['erro' => 'credenciais inválidas']);
-    }
-
-    // Gere seu JWT aqui (use firebase/php-jwt ou similar)
-    $token = 'jwt-' . bin2hex(random_bytes(32));
-
-    return json_response([
-        'token' => $token,
-        'user'  => $usuario['nome'],
-    ]);
-}
-
-#[Get('/me')]
-function me(): string {
-    $token = bearer_token();
-    if ($token === null) {
-        return json_response(['erro' => 'não autenticado']);
-    }
-
-    // Valide o JWT aqui
-    return json_response(['user' => 'Felipe']);
-}
+```bash
+vendor/bin/phinx migrate
 ```
 
-### Proxy para API externa com cache
+---
 
-```php
-#[Get('/github/{user}')]
-function github_user(string $user): string {
-    // O cache do Rust já cobre isso: GET /github/felipedev fica 60s em cache
-    $respostas = http_parallel([
-        "https://api.github.com/users/{$user}"
-    ]);
+## Deploy em produção
 
-    $dados = json_decode($respostas[0] ?? '', true);
-    if (!is_array($dados)) {
-        return json_response(['erro' => 'falha na consulta']);
-    }
+### Docker (recomendado)
 
-    return json_response([
-        'login' => $dados['login'] ?? null,
-        'name'  => $dados['name'] ?? null,
-        'repos' => $dados['public_repos'] ?? 0,
-    ]);
-}
+```bash
+# 1 worker
+docker compose up -d --build
+
+# 4 workers (Nginx balanceia)
+docker compose up -d --scale api=4
+```
+
+O `nginx/nginx.conf` já usa `least_conn` e `resolver 127.0.0.11` (DNS do Docker), então escala automaticamente.
+
+### HTTPS com Certbot
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d api.seudominio.com
+```
+
+### Quantos workers?
+
+| Servidor | Workers | RAM | Throughput estimado |
+| :--- | :--- | :--- | :--- |
+| 2 vCPU / 2 GB | **2** | ~100 MB | ~2-5k req/s |
+| 4 vCPU / 4 GB | **4** | ~200 MB | ~5-10k req/s |
+| 8 vCPU / 8 GB | **8** | ~400 MB | ~10-20k req/s |
+
+**Regra**: `N = núcleos da CPU`. Acima disso não ganha throughput (só contenção).
+
+### systemd (sem Docker)
+
+`/etc/systemd/system/performatic@.service`:
+
+```ini
+[Unit]
+Description=Performatic PHP Worker %i
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/api
+EnvironmentFile=/var/www/api/.env
+Environment="PORT=760%i"
+ExecStart=/var/www/api/target/release/php-server
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now performatic@{0..3}
 ```
 
 ---
 
 ## Performance
 
-Benchmarks em VPS de 4 vCPU / 4 GB, Ubuntu 22.04:
+Benchmarks em Docker (VPS 4 vCPU / 4 GB):
 
-| Endpoint | Performatic PHP (1 worker) | PHP-FPM | Laravel + FPM |
+| Endpoint | Throughput | Cenário |
+| :--- | :--- | :--- |
+| `GET /ping` | **3.500 req/s** | Via Nginx, 1 worker |
+| `GET /ping` (host) | **55.000 req/s** | Sem Docker, sem Nginx |
+| `GET /produtos` (DB) | **400 req/s** | Query SELECT com pool PDO |
+| `GET /produtos` (cache) | **3.500 req/s** | Cache hit (TTL 60s) |
+| `POST /login` (bcrypt) | **~80 req/s** | bcrypt 12 rounds (intencional) |
+
+**Comparação com Laravel + FPM** (mesmo hardware):
+
+| Endpoint | Performatic | Laravel | Ganho |
 | :--- | :--- | :--- | :--- |
-| `/ping` (trivial) | **57.000 req/s** | ~2.000 req/s | ~350 req/s |
-| `/echo` (JSON pequeno) | **55.000 req/s** | ~1.800 req/s | ~300 req/s |
-| `/clima` (I/O 200ms, com cache) | **~50.000 req/s** | ~1.500 req/s | ~300 req/s |
-| `/clima` (I/O 200ms, sem cache) | ~8 req/s (limitado pela API externa) | ~5 req/s | ~2 req/s |
+| `/ping` | 3.500 | 350 | **10×** |
+| `/produtos` (DB) | 400 | 150 | **2,7×** |
+| `/login` | 80 | 40 | **2×** |
 
-**Ganho médio**: **~25× mais rápido** que PHP-FPM, **~150× mais rápido** que Laravel.
+**O gargalo real é o banco, não o framework.** O `eval` do PHP leva ~17μs; o PostgreSQL leva 1-50ms por query.
 
-### Escalando horizontalmente
+### Cache in-memory
 
-Para > 57k req/s em endpoint trivial, rode **N processos** + Nginx:
-
-```nginx
-upstream performatic {
-    least_conn;
-    server 127.0.0.1:7600;
-    server 127.0.0.1:7601;
-    server 127.0.0.1:7602;
-    server 127.0.0.1:7603;
-}
-
-server {
-    listen 8000;
-    location / {
-        proxy_pass http://performatic;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-    }
-}
-```
-
-Cada worker consome ~40 MB de RAM. Sweet spot: `N = núcleos_da_CPU`.
+- Só `GET` é cacheado (nunca POST/PUT/DELETE)
+- TTL: 60s (configurável em `CACHE_TTL_SECS`)
+- Rotas excluídas: `/me`, `/headers`, `/diag`, `/ini`, `/routes`, `/ping`
+- Cache hit retorna em **< 5ms**
 
 ---
 
-## Distribuição
+## Troubleshooting
 
-### Opção A: Template git (recomendado)
-
-Cada novo projeto é um `git clone` do template:
-
+### `AddrInUse` na porta 7600
 ```bash
-git clone https://github.com/withvisionstack/PERFORMATIC-PHP
-cd meu-projeto
-./install.sh
+sudo pkill -9 -f php-server
+sudo fuser -k 7600/tcp
 ```
 
-### Opção B: Docker
-
-```bash
-docker build -t performatic-php .
-docker run -d -p 7600:7600 --env-file .env --name api performatic-php
+### `$GLOBALS` vazando entre requests
+Confirme que o `main.rs` faz o reset:
+```rust
+$GLOBALS['__cookies'] = [];
+$_COOKIE = [];
+$_GET = [];
+$_SERVER = [];
 ```
 
-### Opção C: Binário pré-compilado
-
-Compile uma vez e distribua o binário:
-
+### `vendor/autoload.php not found` no Docker
+O `composer install` falhou. Confirme:
 ```bash
-cargo build --release
-strip target/release/php-server
-# 8-12 MB
+docker compose build --no-cache api 2>&1 | grep "composer OK"
 ```
 
-O usuário só precisa do binário + `api/` + `app/` + `php.ini` + `.env`.
+### `curl.so not loaded` no embed
+Adicione ao `php.ini`:
+```ini
+extension=curl
+extension=pdo_pgsql
+```
 
----
+### `libphp.so not found`
+O `ext-php-rs` procura em `/usr/lib/libphp.so`. Confirme:
+```bash
+docker compose exec api ls -la /usr/lib/libphp*.so*
+```
 
-## Limitações
+### `/login` retornando 100% non-2xx no `wrk`
+Bug conhecido: o `wrk --s /dev/stdin` não envia o `body` corretamente. Salve o script em arquivo:
+```bash
+cat > /tmp/login.lua <<'EOF'
+wrk.method = "POST"
+wrk.body   = '{"email":"admin@test.com","senha":"123456"}'
+wrk.headers["Content-Type"] = "application/json"
+EOF
 
-| Recurso | Status |
-| :--- | :--- |
-| `GET`, `POST` | ✅ |
-| `PUT`, `PATCH`, `DELETE` | ⚠️ Requer adicionar em `attributes.php` |
-| Query string | ✅ |
-| Headers | ✅ |
-| Body JSON | ✅ |
-| Autenticação Bearer | ✅ |
-| `multipart/form-data` (upload) | ❌ Ainda não suportado |
-| Sessões PHP (`session_start`) | ❌ Use JWT |
-| Status HTTP customizado (401, 404) | ⚠️ Ainda não implementado |
-| Múltiplos workers no mesmo processo | ❌ Use N processos + Nginx |
+wrk -t4 -c50 -d15s -s /tmp/login.lua http://localhost:8000/login
+```
 
 ---
 
 ## Licença
 
-MIT. Veja `LICENSE` para detalhes.
-
----
+MIT. Veja [LICENSE](LICENSE).
 
 ## Contribuindo
 
-PRs são bem-vindos. Abra uma issue para discutir features grandes antes de implementar.
+PRs são bem-vindos. Abra uma issue para features grandes antes de implementar.
+
+---
+
+<p align="center">
+  <sub>Feito para quem quer fazer API em PHP sem framework pesado.</sub>
+</p>
