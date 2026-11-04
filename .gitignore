@@ -1,2 +1,26 @@
+# Rust
 /target
-*.env
+Cargo.lock.bak
+
+# Variáveis de ambiente (NUNCA commitar)
+.env
+.env.local
+.env.*.local
+
+# Uploads
+/storage/*
+!/storage/.gitkeep
+
+# Logs
+*.log
+*.pid
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
