@@ -62,7 +62,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
 # 3. Clone o template
-git clone https://github.com/seu-usuario/performatic-php-template meu-projeto
+git clone https://github.com/withvisionstack/PERFORMATIC-PHP
 cd meu-projeto
 
 # 4. Configure o .env
