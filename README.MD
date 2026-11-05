@@ -501,14 +501,6 @@ sudo pkill -9 -f php-server
 sudo fuser -k 7600/tcp
 ```
 
-### `$GLOBALS` vazando entre requests
-Confirme que o `main.rs` faz o reset:
-```rust
-$GLOBALS['__cookies'] = [];
-$_COOKIE = [];
-$_GET = [];
-$_SERVER = [];
-```
 
 ### `vendor/autoload.php not found` no Docker
 O `composer install` falhou. Confirme:
