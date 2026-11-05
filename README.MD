@@ -68,8 +68,8 @@ O `install.sh` instala PHP, Rust, dependências do sistema, cria `.env` e compil
 ### Requisitos (se instalar manualmente)
 
 - Linux (Ubuntu 22.04+, Debian 12+)
-- Rust 1.85+
-- PHP 8.4+ com `php-dev`, `php-curl`, `php-pgsql` (ou `php-mysql`)
+- Rust 1.99
+- PHP 8.5.x com `php-dev`, `php-curl`, `php-pgsql` (ou `php-mysql`)
 - `libclang-dev`, `build-essential`, `pkg-config`
 
 ---
