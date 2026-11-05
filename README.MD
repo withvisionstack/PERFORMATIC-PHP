@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="assets/logo.png" alt="Performatic PHP" width="400">
   <img src="assets/performatic.png" alt="Performatic PHP" width="400">
 </p>
 
