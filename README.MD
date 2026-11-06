@@ -149,6 +149,11 @@ function buscar(int $id): string { /* $id já vem como int */ }
 | `bearer_token()` | `?string` | `bearer_token()` |
 | `current_user()` | `?array` | `current_user()` |
 
+###Segurança Extremamente importante
+
+Estado entre requisições: O worker é persistente. Superglobais são resetadas a cada request, mas static dentro de funções, $GLOBALS customizados e conexões PDO persistem. Não guarde estado de usuário em static — use JWT ou banco
+
+
 ### Escrita de response
 
 | Helper | Status | Uso |
