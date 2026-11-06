@@ -10,6 +10,7 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/multipart.php';
 require_once __DIR__ . '/cookies.php';
 require_once __DIR__ . '/jwt.php';
+require_once __DIR__ . '/validation.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -777,30 +778,28 @@ function listar_produtos(): string
 #[Post('/produtos',
     summary: 'Cria produto',
     tags: ['produtos'])]
-#[Body('ProdutoRequest', example: ['nome' => 'Caneta', 'preco' => 2.50, 'estoque' => 100])]
+#[Body('ProdutoRequest', example: [
+    'nome'  => 'Caneta Azul',
+    'preco' => 2.50,
+    'categoria' => 'livros',
+])]
 #[Response(201, 'Criado')]
 #[Response(400, 'Dados inválidos')]
-#[Response(401, 'Não autenticado')]
-#[Security('BearerAuth')]
 function criar_produto(): string
 {
-    if (current_user() === null) {
-        return unauthorized();
-    }
+    $dados = validate_body('ProdutoRequest');  // 400 automático se inválido
 
-    [$campos, $erro] = __produto_campos(body(), false);
-
-    if ($campos === null) {
-        return http(400, ['erro' => $erro]);
-    }
-
-    $rows = db_query(
-        'INSERT INTO produtos (nome, preco, estoque) VALUES (?, ?, ?)
-         RETURNING id, nome, preco, estoque',
-        [$campos['nome'], $campos['preco'], $campos['estoque']]
+    // Aqui $dados já tem tipos corretos: nome=string, preco=float, estoque=int, ativo=bool
+    $stmt = db_exec(
+        'INSERT INTO produtos (nome, preco, estoque) VALUES (?, ?, ?)',
+        [$dados['nome'], $dados['preco'], $dados['estoque']]
     );
 
-    return http(201, $rows[0]);
+    return http(201, [
+        'id'    => (int) db()->lastInsertId(),
+        'nome'  => $dados['nome'],
+        'preco' => $dados['preco'],
+    ]);
 }
 
 #[Get('/produtos/{id}',

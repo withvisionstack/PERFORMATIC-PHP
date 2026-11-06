@@ -1,5 +1,10 @@
 {
     "require": {
+        "php": ">=8.4",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "ext-json": "*",
+        "ext-curl": "*",
         "firebase/php-jwt": "^7.2"
     }
 }

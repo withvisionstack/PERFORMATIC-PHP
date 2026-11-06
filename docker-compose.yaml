@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: performatic
-      POSTGRES_PASSWORD: performatic
+      POSTGRES_PASSWORD: performatic_logic
       POSTGRES_DB: performatic
     ports:
       - "5432:5432"
@@ -27,7 +27,7 @@ services:
       PORT: 7600
       DB_DSN: "pgsql:host=postgres;port=5432;dbname=performatic"
       DB_USER: performatic
-      DB_PASS: performatic
+      DB_PASS: performatic_logic
       JWT_SECRET: "troque-por-64-hex-chars-aleatorios-antes-de-producao"
     expose:
       - "7600"

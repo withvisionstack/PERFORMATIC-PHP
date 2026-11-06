@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list \
     && apt-get update && apt-get install -y \
-        php8.5-cli php8.5-dev php8.5-curl php8.5-pgsql libphp8.5-embed \
+        php8.5-cli php8.5-dev php8.5-curl php8.5-pgsql php8.5-mbstring libphp8.5-embed \
         libclang-dev build-essential pkg-config unzip zip git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -56,16 +56,15 @@ RUN echo "=== libphp ===" && ls -la /usr/lib/libphp*.so* 2>/dev/null
 # ====================================================
 FROM debian:bookworm-slim
 
+# Runtime
 RUN apt-get update && apt-get install -y \
     curl ca-certificates apt-transport-https lsb-release gnupg \
     && curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list \
     && apt-get update && apt-get install -y \
-        libphp8.5-embed \
-        php8.5-curl \
-        php8.5-pgsql \
+        libphp8.5-embed php8.5-curl php8.5-pgsql php8.5-mbstring \
         libpq5 ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
 
 WORKDIR /app
 

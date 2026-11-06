@@ -6,24 +6,20 @@
 
 function db(): PDO
 {
-    if (!isset($GLOBALS['__pdo'])) {
-        try {
-            $GLOBALS['__pdo'] = new PDO(
-                getenv('DB_DSN') ?: 'sqlite:/tmp/app.db',
-                getenv('DB_USER') ?: '',
-                getenv('DB_PASS') ?: '',
-                [
-                    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_TIMEOUT            => 5,
-                    // ATTR_PERSISTENT removido: $GLOBALS['__pdo'] já mantém a conexão viva
-                ]
-            );
-        } catch (PDOException $e) {
-            error_log('DB connection failed: ' . $e->getMessage());
-            throw $e;
-        }
+    if (!isset($GLOBALS['__pdo']) || !($GLOBALS['__pdo'] instanceof PDO)) {
+        $GLOBALS['__pdo'] = new PDO(
+            getenv('DB_DSN') ?: 'sqlite:/tmp/app.db',
+            getenv('DB_USER') ?: '',
+            getenv('DB_PASS') ?: '',
+            [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_TIMEOUT            => 5,
+            ]
+        );
     }
+
     return $GLOBALS['__pdo'];
 }
 

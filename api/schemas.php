@@ -31,8 +31,10 @@ function __schema_login_request() {}
 function __schema_register_request() {}
 
 #[Schema('ProdutoRequest', [
-    'nome'    => 'string',
-    'preco'   => 'float',
-    'estoque' => 'int',
-], required: ['nome', 'preco'])]
+    'nome'    => 'string|required|min:3|max:200',
+    'preco'   => 'float|required|min:0.01',
+    'estoque' => 'int|default:0|min:0',
+    'categoria' => 'string|in:eletronicos,livros,roupas',
+    'ativo'   => 'bool|default:true',
+])]
 function __schema_produto_request() {}

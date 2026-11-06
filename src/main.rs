@@ -23,7 +23,7 @@ fn main() {
     //let cwd = std::env::current_dir().expect("cwd");
     //std::env::set_var("PHPRC", cwd.join("php.ini"));
     //std::env::set_var("PHP_INI_SCAN_DIR", "");   // ← NOVO: não escaneia conf.d
-    dotenvy::dotenv().ok();
+    dotenvy::dotenv_override().ok();
 
     // ---------------------------------------------------------------------
     // 1. Ler rotas
@@ -142,17 +142,39 @@ fn main() {
                            parse_str(base64_decode('{b64_cookies}'), $_COOKIE); \
                            {headers_php} \
                            {multipart_call} \
-                           return {handler}({args}); \
+                           try {{ \
+                               return {handler}({args}); \
+                           }} catch (\\PerformaticValidationError $e) {{ \
+                               return json_encode([ \
+                                   '__status' => 400, \
+                                   '__body' => [ \
+                                       'erro' => 'validação falhou', \
+                                       'campos' => $e->errors, \
+                                   ], \
+                               ], JSON_UNESCAPED_UNICODE); \
+                           }} catch (Throwable $e) {{ \
+                               $debug = getenv('APP_ENV') === 'development'; \
+                               error_log('Handler error: ' . $e->getMessage() . ' em ' . $e->getFile() . ':' . $e->getLine()); \
+                               return json_encode([ \
+                                   '__status' => 500, \
+                                   '__body' => [ \
+                                       'erro'  => $debug ? $e->getMessage() : 'erro interno', \
+                                       'local' => $debug ? $e->getFile() . ':' . $e->getLine() : null, \
+                                       'tipo'  => $debug ? get_class($e) : null, \
+                                   ], \
+                               ], JSON_UNESCAPED_UNICODE); \
+                           }} \
                        }})();",
-                        b64_body = b64_body,
-                        b64_method = b64_method,
-                        b64_query = b64_query,
-                        b64_cookies = b64_cookies,
-                        headers_php = headers_php,
-                        multipart_call = multipart_call,
-                        handler = job.handler,
-                        args = job.args_php
-                    );
+                       b64_body = b64_body,
+                       b64_method = b64_method,
+                       b64_query = b64_query,
+                       b64_cookies = b64_cookies,
+                       headers_php = headers_php,
+                       multipart_call = multipart_call,
+                       handler = job.handler,
+                       args = job.args_php
+                   );
+
 
                     let result = match Embed::eval(&code) {
                         Ok(z) => match z.string() {

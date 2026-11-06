@@ -89,7 +89,7 @@ pub struct AppState {
     pub security_schemes: Vec<SecuritySchemeDef>,
 }
 
-pub const CACHE_TTL_SECS: u64 = 60;
+pub const CACHE_TTL_SECS: u64 = 0;
 
 pub fn is_cacheable(method: &str, path: &str) -> bool {
     if method != "GET" {
