@@ -122,6 +122,7 @@ O `install.sh` instala PHP, Rust e dependências do sistema, cria o `.env` e com
 - Rust (versão indicada no `Cargo.toml`)
 - PHP 8.5 com `php-dev`, `php-curl` e `php-pgsql` (ou `php-mysql`)
 - `libclang-dev`, `build-essential`, `pkg-config`
+- Windows e oficialmente não suportado somente via WSL2/Ubuntu 
 
 ---
 
