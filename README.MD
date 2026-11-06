@@ -539,6 +539,16 @@ Benchmarks em VPS de 4 vCPU / 4 GB, Docker Compose (Nginx + PostgreSQL 16), medi
 
 O overhead de ~5× em relação ao host vem da bridge do Docker e dos dois saltos de rede. A latência alta reflete o **modelo serial de um único worker**: cada request espera a anterior terminar. Escalar workers resolve isso (veja abaixo).
 
+### Escalando com N workers
+
+```bash
+docker compose up -d --scale api=4
+Setup	GET /health	GET /produtos
+1 worker	~1.000 req/s	~300 req/s
+4 workers	~4.000 req/s	~1.200 req/s
+O Nginx faz load balancing (least_conn). Ganho próximo de linear até saturar CPU.
+
+
 ### Comparação com Laravel + FPM (mesmo hardware)
 
 | Endpoint | Performatic | Laravel | Ganho |
