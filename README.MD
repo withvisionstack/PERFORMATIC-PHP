@@ -1,8 +1,5 @@
 <p align="center">
   <img src="assets/logo.png" alt="Performatic PHP" width="360">
-  <img src="assets/performatic.png" alt="Performatic PHP" width="400">
-  <img src="Performatic_PHP_generation_doc_API.png" alt="Performatic PHP" width="400">
-  <img src="CLI_Application.png" alt="Performatic PHP" width="400">
 </p>
 
 <h1 align="center">Performatic PHP</h1>
@@ -21,7 +18,11 @@
 </p>
 
 <p align="center">
-  OpenAPI automático · JWT · PostgreSQL · Cache in-memory · Upload multipart · HTTP paralelo
+  OpenAPI automático · JWT · PostgreSQL · Cache in-memory · Upload multipart · HTTP paralelo · CLI
+</p>
+
+<p align="center">
+  <img src="assets/performatic.png" alt="Performatic PHP em ação" width="720">
 </p>
 
 ---
@@ -32,8 +33,10 @@
 - [Como funciona](#como-funciona)
 - [Instalação](#instalação)
 - [Sua primeira rota](#sua-primeira-rota)
+- [⚠️ Segurança e estado do worker](#️-segurança-e-estado-do-worker)
 - [Referência](#referência)
 - [OpenAPI automático](#openapi-automático)
+- [CLI](#cli)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Pacotes recomendados](#pacotes-recomendados)
 - [Migrations](#migrations)
@@ -77,6 +80,8 @@ Cliente ──► Nginx ──► Worker (Rust) ──► PHP embed ──► su
 ```
 
 O Rust recebe a conexão, resolve a rota a partir dos atributos PHP e executa sua função dentro de um PHP embutido, evitando o custo de inicializar o PHP a cada request.
+
+> Como o worker é **persistente**, leia a seção [Segurança e estado do worker](#️-segurança-e-estado-do-worker) antes de ir para produção.
 
 ---
 
@@ -134,11 +139,6 @@ function listar_produtos(): string
     return http(200, ['produtos' => $produtos, 'total' => count($produtos)]);
 }
 ```
-### Segurança Extremamente importante
-
-Estado entre requisições: O worker é persistente. Superglobais são resetadas a cada request, mas static dentro de funções, $GLOBALS customizados e conexões PDO persistem. Não guarde estado de usuário em static — use JWT ou banco
-
-
 
 **2. Registre em `api/routes.php`:**
 
@@ -167,6 +167,41 @@ curl http://localhost:8000/produtos | jq
 ```
 
 Pronto. O Swagger em `/docs` já documenta a rota automaticamente.
+
+---
+
+## ⚠️ Segurança e estado do worker
+
+O worker é **persistente**: o PHP não reinicia a cada request. Isso é o que dá a performance, mas muda as regras do jogo em relação ao PHP-FPM.
+
+| O que | Comportamento entre requests |
+| :--- | :--- |
+| Superglobais (`$_GET`, `$_POST`, `$_SERVER`...) | ✅ Resetadas a cada request |
+| Variáveis `static` dentro de funções | ⚠️ **Persistem** |
+| `$GLOBALS` customizados | ⚠️ **Persistem** |
+| Conexões PDO | ⚠️ **Persistem** (reaproveitadas) |
+
+**Regras de ouro**
+
+- ❌ **Nunca** guarde dados de usuário em `static` ou `$GLOBALS`: o próximo request pode lê-los (vazamento entre usuários).
+  Use **JWT** (`current_user()`) ou o **banco**.
+- ✅ Cache compartilhado de propósito é ok, mas só com dados **não sensíveis**, e use o [cache in-memory](#cache-in-memory) do framework em vez de improvisar.
+- ✅ Sempre finalize transações (`commit`/`rollBack`): uma transação aberta vaza para o próximo request na mesma conexão.
+- ✅ Valide e limite uploads (tamanho, tipo) e use prepared statements em todo SQL.
+- ✅ Em produção: segredo JWT forte no `.env` e HTTPS.
+
+```php
+// ❌ Errado: o valor sobrevive ao request e vaza para outro usuário
+function usuario_atual() {
+    static $user = null;
+    return $user ??= current_user();
+}
+
+// ✅ Certo: leia de novo a cada request
+function usuario_atual() {
+    return current_user();
+}
+```
 
 ---
 
@@ -286,8 +321,6 @@ fetch('/me', { headers: { Authorization: `Bearer ${token}` } })
 fetch('/me', { credentials: 'include' })
 ```
 
-> Em produção, defina um segredo JWT forte no `.env` e sirva a API por HTTPS.
-
 ### Upload de arquivos
 
 ```php
@@ -330,6 +363,10 @@ function clima(): string
 
 Todo endpoint anotado aparece no Swagger em `/docs`.
 
+<p align="center">
+  <img src="Performatic_PHP_generation_doc_API.png" alt="Documentação da API gerada automaticamente" width="720">
+</p>
+
 ```php
 #[Post('/produtos',
     summary: 'Cria produto',
@@ -367,6 +404,16 @@ function __security_bearer() {}
 ```
 
 Abra <http://localhost:8000/docs> para a Swagger UI interativa, com os botões **Authorize** e **Try it out**.
+
+---
+
+## CLI
+
+<p align="center">
+  <img src="CLI_Application.png" alt="Performatic PHP CLI" width="720">
+</p>
+
+<!-- Descreva aqui os comandos da CLI (ex.: criar projeto, gerar rota, rodar migrations). -->
 
 ---
 
@@ -537,17 +584,20 @@ Benchmarks em VPS de 4 vCPU / 4 GB, Docker Compose (Nginx + PostgreSQL 16), medi
 | `GET /produtos` (DB) | ~300 req/s | 156 ms | 1,21 s |
 | `POST /produtos` (DB + validação) | ~300 req/s | 133 ms | 403 ms |
 
-O overhead de ~5× em relação ao host vem da bridge do Docker e dos dois saltos de rede. A latência alta reflete o **modelo serial de um único worker**: cada request espera a anterior terminar. Escalar workers resolve isso (veja abaixo).
+O overhead de ~5× em relação ao host vem da bridge do Docker e dos dois saltos de rede. A latência alta reflete o **modelo serial de um único worker**: cada request espera a anterior terminar. Escalar workers resolve isso.
 
 ### Escalando com N workers
 
 ```bash
 docker compose up -d --scale api=4
-Setup	GET /health	GET /produtos
-1 worker	~1.000 req/s	~300 req/s
-4 workers	~4.000 req/s	~1.200 req/s
-O Nginx faz load balancing (least_conn). Ganho próximo de linear até saturar CPU.
+```
 
+| Setup | `GET /health` | `GET /produtos` |
+| :--- | :--- | :--- |
+| 1 worker | ~1.000 req/s | ~300 req/s |
+| 4 workers | ~4.000 req/s | ~1.200 req/s |
+
+O Nginx faz load balancing (`least_conn`). O ganho é próximo de linear até saturar a CPU.
 
 ### Comparação com Laravel + FPM (mesmo hardware)
 
