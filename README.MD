@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Performatic PHP" width="400">
+  <img src="assets/logo.png" alt="Performatic PHP" width="360">
   <img src="assets/performatic.png" alt="Performatic PHP" width="400">
+  <img src="Performatic_PHP_generation_doc_API.png" alt="Performatic PHP" width="400">
+  <img src="CLI_Application.png" alt="Performatic PHP" width="400">
 </p>
 
 <h1 align="center">Performatic PHP</h1>
@@ -8,18 +10,46 @@
 <p align="center">
   <strong>API em PHP procedural. Motor em Rust. Sem Laravel.</strong>
   <br>
-  <code>#[Get('/users')]</code> · <code>body()</code> · <code>db()</code> · <code>http(404, ...)</code>
-  <br>
-  <sub>OpenAPI automático · JWT · PostgreSQL · Cache in-memory · Multipart upload</sub>
+  <code>#[Get('/users')]</code> · <code>body()</code> · <code>db_query()</code> · <code>http(404, ...)</code>
 </p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg"></a>
+  <img alt="PHP 8.5" src="https://img.shields.io/badge/PHP-8.5-777BB4.svg">
+  <img alt="Rust" src="https://img.shields.io/badge/motor-Rust-orange.svg">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-336791.svg">
+</p>
+
+<p align="center">
+  OpenAPI automático · JWT · PostgreSQL · Cache in-memory · Upload multipart · HTTP paralelo
+</p>
+
+---
+
+## Sumário
+
+- [Por que existe](#por-que-existe)
+- [Como funciona](#como-funciona)
+- [Instalação](#instalação)
+- [Sua primeira rota](#sua-primeira-rota)
+- [Referência](#referência)
+- [OpenAPI automático](#openapi-automático)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Pacotes recomendados](#pacotes-recomendados)
+- [Migrations](#migrations)
+- [Deploy em produção](#deploy-em-produção)
+- [Performance](#performance)
+- [Cache in-memory](#cache-in-memory)
+- [Troubleshooting](#troubleshooting)
+- [Contribuindo](#contribuindo)
 
 ---
 
 ## Por que existe
 
-Você já sabe PHP. Você já sabe SQL. Não precisa aprender Eloquent, Blade, Artisan, Facades ou container DI para fazer uma API.
+Você já sabe PHP. Você já sabe SQL. Não precisa aprender Eloquent, Blade, Artisan, Facades ou container de DI para criar uma API.
 
-**Performatic PHP** é PHP procedural puro com um motor em Rust. Você escreve funções, o framework cuida do HTTP.
+**Performatic PHP** é PHP procedural puro com um motor em Rust. Você escreve funções; o framework cuida do HTTP.
 
 ```php
 #[Get('/usuarios/{id}')]
@@ -30,7 +60,23 @@ function buscar(int $id): string
 }
 ```
 
-Isso é tudo. Swagger em `/docs`, JWT em `/login`, cache automático, upload — sem framework pesado.
+Isso é tudo. Swagger em `/docs`, JWT, cache e upload — sem framework pesado.
+
+**Use quando** você quer uma API JSON rápida, com poucas dependências e código fácil de ler.
+**Talvez não seja a melhor escolha quando** você precisa de ORM, renderização de views, filas ou um ecossistema de pacotes de framework completo.
+
+---
+
+## Como funciona
+
+```
+Cliente ──► Nginx ──► Worker (Rust) ──► PHP embed ──► sua função #[Get(...)]
+                          │                               │
+                          ├─ roteamento, cache, JWT       └─ db_query(), http(), body()
+                          └─ multipart, HTTP paralelo
+```
+
+O Rust recebe a conexão, resolve a rota a partir dos atributos PHP e executa sua função dentro de um PHP embutido, evitando o custo de inicializar o PHP a cada request.
 
 ---
 
@@ -46,13 +92,13 @@ docker compose up -d --build
 ```
 
 Teste:
+
 ```bash
 curl http://localhost:8000/ping
 # {"pong":true,"ts":...}
-
-# Swagger
-open http://localhost:8000/docs
 ```
+
+Swagger: <http://localhost:8000/docs>
 
 ### VPS (Ubuntu/Debian, sem Docker)
 
@@ -63,20 +109,20 @@ cd meu-projeto
 cargo run --release
 ```
 
-O `install.sh` instala PHP, Rust, dependências do sistema, cria `.env` e compila.
+O `install.sh` instala PHP, Rust e dependências do sistema, cria o `.env` e compila.
 
-### Requisitos (se instalar manualmente)
+### Requisitos (instalação manual)
 
-- Linux (Ubuntu 22.04+, Debian 12+)
-- Rust 1.99
-- PHP 8.5.x com `php-dev`, `php-curl`, `php-pgsql` (ou `php-mysql`)
+- Linux (Ubuntu 22.04+ ou Debian 12+)
+- Rust (versão indicada no `Cargo.toml`)
+- PHP 8.5 com `php-dev`, `php-curl` e `php-pgsql` (ou `php-mysql`)
 - `libclang-dev`, `build-essential`, `pkg-config`
 
 ---
 
 ## Sua primeira rota
 
-Edite `api/routes/produtos.php` (crie se não existir):
+**1. Crie `api/routes/produtos.php`:**
 
 ```php
 <?php
@@ -88,14 +134,19 @@ function listar_produtos(): string
     return http(200, ['produtos' => $produtos, 'total' => count($produtos)]);
 }
 ```
+### Segurança Extremamente importante
 
-Registre no `api/routes.php`:
+Estado entre requisições: O worker é persistente. Superglobais são resetadas a cada request, mas static dentro de funções, $GLOBALS customizados e conexões PDO persistem. Não guarde estado de usuário em static — use JWT ou banco
+
+
+
+**2. Registre em `api/routes.php`:**
 
 ```php
 require_once __DIR__ . '/routes/produtos.php';
 ```
 
-Crie a tabela:
+**3. Crie a tabela:**
 
 ```bash
 docker compose exec postgres psql -U performatic -d performatic -c "
@@ -108,30 +159,30 @@ INSERT INTO produtos (nome, preco) VALUES ('Caneta', 2.50), ('Caderno', 15.00);
 "
 ```
 
-Teste:
+**4. Teste:**
 
 ```bash
 curl http://localhost:8000/produtos | jq
 # {"produtos":[{"id":1,"nome":"Caneta","preco":"2.50"},{"id":2,"nome":"Caderno","preco":"15.00"}],"total":2}
 ```
 
-**Pronto.** Swagger em `/docs` já documenta automaticamente.
+Pronto. O Swagger em `/docs` já documenta a rota automaticamente.
 
 ---
 
-## Sintaxe
+## Referência
 
 ### Roteamento
 
 ```php
-#[Get('/caminho')]              // GET
-#[Post('/caminho')]             // POST
-#[Put('/caminho')]              // PUT
-#[Patch('/caminho')]            // PATCH
-#[Delete('/caminho')]           // DELETE
+#[Get('/caminho')]       // GET
+#[Post('/caminho')]      // POST
+#[Put('/caminho')]       // PUT
+#[Patch('/caminho')]     // PATCH
+#[Delete('/caminho')]    // DELETE
 
-#[Get('/usuarios/{id}')]        // parâmetro de URL
-function buscar(int $id): string { /* $id já vem como int */ }
+#[Get('/usuarios/{id}')] // parâmetro de URL, já tipado
+function buscar(int $id): string { /* $id chega como int */ }
 ```
 
 ### Leitura de request
@@ -143,27 +194,30 @@ function buscar(int $id): string { /* $id já vem como int */ }
 | `method()` | `string` | `if (method() === 'POST')` |
 | `query($key, $default)` | `mixed` | `$page = (int) query('page', 1);` |
 | `header($name, $default)` | `?string` | `header('User-Agent')` |
-| `bearer_token()` | `?string` | `bearer_token()` |
-| `current_user()` | `?array` | `current_user()` |
+| `bearer_token()` | `?string` | `$token = bearer_token();` |
+| `current_user()` | `?array` | `$user = current_user();` |
 
 ### Escrita de response
 
 | Helper | Status | Uso |
 | :--- | :--- | :--- |
 | `json_response($array)` | 200 | `return json_response([...]);` |
-| `http($status, $array)` | custom | `return http(201, ['id' => 1]);` |
-| `http($status, ['erro' => '...'])` | custom | `return http(400, ['erro' => 'inválido']);` |
+| `http($status, $array)` | customizado | `return http(201, ['id' => 1]);` |
 
-**Status comuns**: 200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500.
+Erros seguem o mesmo padrão: `return http(400, ['erro' => 'inválido']);`
+
+Status comuns: `200`, `201`, `204`, `400`, `401`, `403`, `404`, `409`, `422`, `429`, `500`.
 
 ### Banco de dados
+
+Sempre use prepared statements (`?`) — nunca concatene entrada do usuário no SQL.
 
 ```php
 // SELECT (retorna array)
 $rows = db_query('SELECT * FROM produtos WHERE preco > ?', [100]);
 
 // INSERT
-$pdo = db();
+$pdo  = db();
 $stmt = $pdo->prepare('INSERT INTO produtos (nome, preco) VALUES (?, ?)');
 $stmt->execute(['Caneta', 2.50]);
 $id = (int) $pdo->lastInsertId();
@@ -215,20 +269,24 @@ function login(): string
 #[Response(401, 'Não autenticado')]
 function me(): string
 {
-    $user = current_user();  // funciona com Bearer OU Cookie
+    $user = current_user(); // funciona com Bearer OU cookie
     return $user === null ? http(401, ['erro' => 'não autenticado']) : http(200, $user);
 }
 ```
 
-**Cliente SPA/mobile**:
+**SPA / mobile** (header Bearer):
+
 ```javascript
 fetch('/me', { headers: { Authorization: `Bearer ${token}` } })
 ```
 
-**Cliente browser** (cookie HttpOnly, sem JS acessível):
+**Navegador** (cookie HttpOnly, inacessível ao JS):
+
 ```javascript
 fetch('/me', { credentials: 'include' })
 ```
+
+> Em produção, defina um segredo JWT forte no `.env` e sirva a API por HTTPS.
 
 ### Upload de arquivos
 
@@ -251,7 +309,7 @@ function upload(): string
 curl -X POST http://localhost:8000/upload -F "arquivo=@foto.jpg"
 ```
 
-### HTTP paralelo (API externa)
+### HTTP paralelo (APIs externas)
 
 ```php
 #[Get('/clima')]
@@ -261,7 +319,7 @@ function clima(): string
         'https://api.clima.com/sao-paulo',
         'https://api.clima.com/curitiba',
     ];
-    $respostas = http_parallel($urls);  // dispara as 2 em paralelo
+    $respostas = http_parallel($urls); // dispara as duas em paralelo
     return http(200, ['dados' => array_map('json_decode', $respostas)]);
 }
 ```
@@ -284,7 +342,7 @@ Todo endpoint anotado aparece no Swagger em `/docs`.
 function criar(): string { /* ... */ }
 ```
 
-Schemas em `api/schemas.php`:
+**Schemas** em `api/schemas.php`:
 
 ```php
 #[Schema('ProdutoRequest', [
@@ -301,74 +359,71 @@ function __schema_produto_request() {}
 function __schema_produto() {}
 ```
 
-Security schemes em `api/security.php`:
+**Security schemes** em `api/security.php`:
 
 ```php
 #[SecurityScheme('BearerAuth', 'http', 'bearer', 'JWT')]
 function __security_bearer() {}
 ```
 
-Acesse `http://localhost:8000/docs` → Swagger UI interativa, com botão "Authorize" e "Try it out".
+Abra <http://localhost:8000/docs> para a Swagger UI interativa, com os botões **Authorize** e **Try it out**.
 
 ---
 
-## Estrutura de projeto recomendada
+## Estrutura do projeto
 
 ```
 meu-projeto/
-├── src/                       ← motor Rust (não editar)
+├── src/                  ← motor Rust (não editar)
 ├── api/
-│   ├── routes/
-│   │   ├── auth.php           ← /login, /register, /me
-│   │   ├── usuarios.php       ← CRUD usuarios
-│   │   ├── produtos.php       ← CRUD produtos
-│   │   └── pedidos.php        ← CRUD pedidos
-│   ├── routes.php             ← entrypoint (só requires)
-│   ├── schemas.php            ← schemas OpenAPI
-│   ├── security.php           ← schemes de auth
-│   ├── attributes.php         ← #[Get], #[Post], etc (não editar)
-│   ├── http.php               ← http_parallel (não editar)
-│   ├── cookies.php            ← set_cookie (não editar)
-│   ├── jwt.php                ← jwt_encode/decode (não editar)
-│   ├── multipart.php          ← upload (não editar)
-│   └── db.php                 ← PDO helpers (não editar)
-├── db/
-│   └── init.sql               ← schema inicial
-├── app/
-│   └── config.php             ← carrega .env (não editar)
-├── storage/                   ← uploads (git-ignored)
-├── nginx/
-│   └── nginx.conf
-├── .env                       ← configuração (git-ignored)
-├── .env.example
+│   ├── routes/           ← suas rotas, um arquivo por domínio
+│   │   ├── auth.php
+│   │   ├── usuarios.php
+│   │   ├── produtos.php
+│   │   └── pedidos.php
+│   ├── routes.php        ← entrypoint (só requires)
+│   ├── schemas.php       ← schemas OpenAPI
+│   ├── security.php      ← schemes de autenticação
+│   ├── attributes.php    ← #[Get], #[Post]... (não editar)
+│   ├── http.php          ← http_parallel (não editar)
+│   ├── cookies.php       ← set_cookie (não editar)
+│   ├── jwt.php           ← jwt_encode/decode (não editar)
+│   ├── multipart.php     ← upload (não editar)
+│   └── db.php            ← helpers PDO (não editar)
+├── app/config.php        ← carrega .env (não editar)
+├── db/init.sql           ← schema inicial
+├── storage/              ← uploads (ignorado pelo git)
+├── nginx/nginx.conf
+├── .env / .env.example
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Cargo.toml
-├── composer.json
-└── README.md
+└── composer.json
 ```
 
-**Divida por domínio** quando passar de 20 rotas. Cada arquivo em `api/routes/` é independente.
+**Divida por domínio** quando passar de ~20 rotas. Cada arquivo em `api/routes/` é independente.
 
 ---
 
-## Pacotes recomendados (Packagist)
+## Pacotes recomendados
 
 | Pacote | Uso | Instalação |
 | :--- | :--- | :--- |
-| **`firebase/php-jwt`** | JWT (já instalado) | `composer require firebase/php-jwt` |
-| **`robmorgan/phinx`** | Migrations | `composer require robmorgan/phinx` |
-| **`monolog/monolog`** | Logs estruturados | `composer require monolog/monolog` |
-| **`ramsey/uuid`** | UUIDs | `composer require ramsey/uuid` |
-| **`guzzlehttp/guzzle`** | HTTP client (se não quiser `http_parallel`) | `composer require guzzlehttp/guzzle` |
-| **`stripe/stripe-php`** | Pagamentos | `composer require stripe/stripe-php` |
-| **`phpmailer/phpmailer`** | E-mail SMTP | `composer require phpmailer/phpmailer` |
+| `firebase/php-jwt` | JWT (já incluído) | `composer require firebase/php-jwt` |
+| `robmorgan/phinx` | Migrations | `composer require robmorgan/phinx` |
+| `monolog/monolog` | Logs estruturados | `composer require monolog/monolog` |
+| `ramsey/uuid` | UUIDs | `composer require ramsey/uuid` |
+| `guzzlehttp/guzzle` | Cliente HTTP (alternativa ao `http_parallel`) | `composer require guzzlehttp/guzzle` |
+| `stripe/stripe-php` | Pagamentos | `composer require stripe/stripe-php` |
+| `phpmailer/phpmailer` | E-mail SMTP | `composer require phpmailer/phpmailer` |
 
-**NÃO use**: `illuminate/database` (Eloquent), `doctrine/orm`, `symfony/console`, `laravel/framework` — todos trazem peso e paradigma OOP que contradizem o framework.
+**Evite** `illuminate/database` (Eloquent), `doctrine/orm`, `symfony/console` e `laravel/framework`: trazem peso e um paradigma OOP que contradiz a proposta do framework.
 
 ---
 
-## Migrations (Phinx)
+## Migrations
+
+Usamos o [Phinx](https://phinx.org):
 
 ```bash
 composer require robmorgan/phinx
@@ -403,100 +458,27 @@ vendor/bin/phinx migrate
 
 ## Deploy em produção
 
-### Docker (recomendado)
+### Docker + Nginx
 
 ```bash
 # 1 worker
 docker compose up -d --build
 
-# 4 workers (Nginx balanceia)
+# 4 workers (o Nginx balanceia)
 docker compose up -d --scale api=4
 ```
 
-O `nginx/nginx.conf` já usa `least_conn` e `resolver 127.0.0.11` (DNS do Docker), então escala automaticamente.
-
-## Docker build
-
-O Dockerfile copia `framework/` duas vezes:
-1. **No builder**, antes do `composer install` — o `composer.json` usa
-   `path` repository apontando para `./framework`
-2. **No runtime** — o vendor cria um symlink relativo para `../../framework/`,
-   então o target precisa existir
-
-Quando o framework for publicado no Packagist (v1.2), remova:
-- `COPY framework ./framework` (builder)
-- `COPY --from=builder /app/framework ./framework` (runtime)
-- O bloco `repositories` do `composer.json`
-- O `"performatic/framework": "dev-main"` do `composer.lock`
-
-### HTTPS com Certbot
-
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d api.seudominio.com
-```
+O `nginx/nginx.conf` já usa `least_conn` e `resolver 127.0.0.11` (DNS do Docker), então escala sem configuração extra.
 
 ### Quantos workers?
 
-| Servidor | Workers | RAM | Throughput estimado |
+Regra prática: **N = número de núcleos da CPU**. Acima disso não há ganho de throughput, só contenção.
+
+| Servidor | Workers | RAM estimada | Throughput estimado |
 | :--- | :--- | :--- | :--- |
-| 2 vCPU / 2 GB | **2** | ~100 MB | ~2-5k req/s |
-| 4 vCPU / 4 GB | **4** | ~200 MB | ~5-10k req/s |
-| 8 vCPU / 8 GB | **8** | ~400 MB | ~10-20k req/s |
-
-**Regra**: `N = núcleos da CPU`. Acima disso não ganha throughput (só contenção).
-
-
-## Performance
-
-Benchmarks executados em VPS de 4 vCPU / 4 GB, Docker Compose (Nginx + 1 worker + PostgreSQL 16).
-
-### Host direto (sem Docker)
-
-| Endpoint | Throughput | Latência p50 |
-| :--- | :--- | :--- |
-| `GET /ping` (trivial) | **55.000 req/s** | < 5ms |
-| `GET /produtos` (DB) | ~2.000 req/s | ~2ms |
-| `POST /login` (bcrypt) | ~80 req/s | ~12ms |
-
-> Estes números refletem o motor puro (Rust + PHP embed). Sem Nginx, sem bridge Docker.
-
-### Docker + Nginx + 1 worker
-
-| Endpoint | Throughput | Latência p50 | Latência p99 |
-| :--- | :--- | :--- | :--- |
-| `GET /health` | **~1.000 req/s** | 44ms | 790ms |
-| `GET /produtos` (DB) | **~300 req/s** | 156ms | 1.21s |
-| `POST /produtos` (DB + validação) | **~300 req/s** | 133ms | 403ms |
-
-> Números reais do container. Overhead de ~5× vs host (bridge Docker + 2 hops de rede). A latência alta reflete o **modelo serial do worker único** — cada request espera a anterior terminar.
-
-
-## 🧪 Teste bônus (vale a pena para o README)
-
-O número "1 worker = 1000 req/s" parece fraco comparado ao FrankenPHP. Mas com 4 workers:
-
-```bash
-# 1. Escala para 4 workers
-docker compose up -d --scale api=4
-sleep 15
-
-# 2. Confirma
-docker compose ps | grep api | wc -l
-# Esperado: 4
-
-# 3. Repete o /health
-wrk -t4 -c100 -d15s --latency http://localhost:8000/health
-
-
-# 4. Volta para 1 worker (dev)
-docker compose up -d --scale api=1
-
-
-### Escalando com N workers
-
-```bash
-docker compose up -d --scale api=4
+| 2 vCPU / 2 GB | 2 | ~100 MB | ~2–5k req/s |
+| 4 vCPU / 4 GB | 4 | ~200 MB | ~5–10k req/s |
+| 8 vCPU / 8 GB | 8 | ~400 MB | ~10–20k req/s |
 
 ### systemd (sem Docker)
 
@@ -526,69 +508,120 @@ WantedBy=multi-user.target
 sudo systemctl enable --now performatic@{0..3}
 ```
 
+### HTTPS com Certbot
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d api.seudominio.com
+```
+
 ---
 
 ## Performance
 
-Benchmarks em Docker (VPS 4 vCPU / 4 GB):
+Benchmarks em VPS de 4 vCPU / 4 GB, Docker Compose (Nginx + PostgreSQL 16), medidos com [`wrk`](https://github.com/wg/wrk).
 
-| Endpoint | Throughput | Cenário |
+### Motor puro (host, sem Docker e sem Nginx)
+
+| Endpoint | Throughput | Latência p50 |
 | :--- | :--- | :--- |
-| `GET /ping` | **3.500 req/s** | Via Nginx, 1 worker |
-| `GET /ping` (host) | **55.000 req/s** | Sem Docker, sem Nginx |
-| `GET /produtos` (DB) | **400 req/s** | Query SELECT com pool PDO |
-| `GET /produtos` (cache) | **3.500 req/s** | Cache hit (TTL 60s) |
-| `POST /login` (bcrypt) | **~80 req/s** | bcrypt 12 rounds (intencional) |
+| `GET /ping` (trivial) | **~55.000 req/s** | < 5 ms |
+| `GET /produtos` (DB) | ~2.000 req/s | ~2 ms |
+| `POST /login` (bcrypt) | ~80 req/s | ~12 ms |
 
-**Comparação com Laravel + FPM** (mesmo hardware):
+### Docker + Nginx + 1 worker
+
+| Endpoint | Throughput | Latência p50 | Latência p99 |
+| :--- | :--- | :--- | :--- |
+| `GET /health` | ~1.000 req/s | 44 ms | 790 ms |
+| `GET /produtos` (DB) | ~300 req/s | 156 ms | 1,21 s |
+| `POST /produtos` (DB + validação) | ~300 req/s | 133 ms | 403 ms |
+
+O overhead de ~5× em relação ao host vem da bridge do Docker e dos dois saltos de rede. A latência alta reflete o **modelo serial de um único worker**: cada request espera a anterior terminar. Escalar workers resolve isso (veja abaixo).
+
+### Comparação com Laravel + FPM (mesmo hardware)
 
 | Endpoint | Performatic | Laravel | Ganho |
 | :--- | :--- | :--- | :--- |
-| `/ping` | 3.500 | 350 | **10×** |
-| `/produtos` (DB) | 400 | 150 | **2,7×** |
-| `/login` | 80 | 40 | **2×** |
+| `/ping` | 3.500 req/s | 350 req/s | ~10× |
+| `/produtos` (DB) | 400 req/s | 150 req/s | ~2,7× |
+| `/login` | 80 req/s | 40 req/s | ~2× |
 
-**O gargalo real é o banco, não o framework.** O `eval` do PHP leva ~17μs; o PostgreSQL leva 1-50ms por query.
+> O gargalo real costuma ser o banco, não o framework: o `eval` do PHP leva ~17 µs, enquanto uma query no PostgreSQL leva de 1 a 50 ms. Benchmarks variam com hardware e configuração — reproduza no seu ambiente.
 
-### Cache in-memory
+### Reproduzindo os testes
 
-- Só `GET` é cacheado (nunca POST/PUT/DELETE)
-- TTL: 60s (configurável em `CACHE_TTL_SECS`)
-- Rotas excluídas: `/me`, `/headers`, `/diag`, `/ini`, `/routes`, `/ping`
-- Cache hit retorna em **< 5ms**
+```bash
+# 1 worker
+wrk -t4 -c100 -d15s --latency http://localhost:8000/health
+
+# 4 workers
+docker compose up -d --scale api=4 && sleep 15
+docker compose ps | grep api | wc -l        # esperado: 4
+wrk -t4 -c100 -d15s --latency http://localhost:8000/health
+
+# volta para 1 worker (dev)
+docker compose up -d --scale api=1
+```
+
+---
+
+## Cache in-memory
+
+- Apenas `GET` é cacheado (nunca `POST`, `PUT`, `PATCH` ou `DELETE`).
+- TTL padrão: 60 s, configurável com `CACHE_TTL_SECS` no `.env`.
+- Rotas excluídas: `/me`, `/headers`, `/diag`, `/ini`, `/routes`, `/ping`.
+- Cache hit responde em **< 5 ms** (~3.500 req/s no cenário `GET /produtos`).
 
 ---
 
 ## Troubleshooting
 
-### `AddrInUse` na porta 7600
+<details>
+<summary><code>AddrInUse</code> na porta 7600</summary>
+
 ```bash
 sudo pkill -9 -f php-server
 sudo fuser -k 7600/tcp
 ```
+</details>
 
+<details>
+<summary><code>vendor/autoload.php not found</code> no Docker</summary>
 
-### `vendor/autoload.php not found` no Docker
-O `composer install` falhou. Confirme:
+O `composer install` falhou durante o build. Confirme:
+
 ```bash
 docker compose build --no-cache api 2>&1 | grep "composer OK"
 ```
+</details>
 
-### `curl.so not loaded` no embed
+<details>
+<summary><code>curl.so not loaded</code> no embed</summary>
+
 Adicione ao `php.ini`:
+
 ```ini
 extension=curl
 extension=pdo_pgsql
 ```
+</details>
 
-### `libphp.so not found`
+<details>
+<summary><code>libphp.so not found</code></summary>
+
 O `ext-php-rs` procura em `/usr/lib/libphp.so`. Confirme:
+
 ```bash
 docker compose exec api ls -la /usr/lib/libphp*.so*
 ```
+</details>
 
-### `/login` retornando 100% non-2xx no `wrk`
-Bug conhecido: o `wrk --s /dev/stdin` não envia o `body` corretamente. Salve o script em arquivo:
+<details>
+<summary><code>/login</code> retorna 100% non-2xx no <code>wrk</code></summary>
+
+Bug conhecido: `wrk -s /dev/stdin` não envia o `body` corretamente. Salve o script em arquivo:
+
 ```bash
 cat > /tmp/login.lua <<'EOF'
 wrk.method = "POST"
@@ -598,6 +631,26 @@ EOF
 
 wrk -t4 -c50 -d15s -s /tmp/login.lua http://localhost:8000/login
 ```
+</details>
+
+---
+
+## Contribuindo
+
+PRs são bem-vindos. Abra uma issue antes de implementar features grandes.
+
+### Nota sobre o build Docker
+
+O `Dockerfile` copia `framework/` duas vezes:
+
+1. **No builder**, antes do `composer install` — o `composer.json` usa um repositório `path` apontando para `./framework`.
+2. **No runtime** — o `vendor` cria um symlink relativo para `../../framework/`, então o destino precisa existir.
+
+Quando o framework for publicado no Packagist (v1.2), remova:
+
+- `COPY framework ./framework` (builder) e `COPY --from=builder /app/framework ./framework` (runtime)
+- o bloco `repositories` do `composer.json`
+- a entrada `"performatic/framework": "dev-main"` do `composer.lock`
 
 ---
 
@@ -605,12 +658,6 @@ wrk -t4 -c50 -d15s -s /tmp/login.lua http://localhost:8000/login
 
 MIT. Veja [LICENSE](LICENSE).
 
-## Contribuindo
-
-PRs são bem-vindos. Abra uma issue para features grandes antes de implementar.
-
----
-
 <p align="center">
-  <sub>Feito para quem quer fazer API em PHP sem framework pesado.</sub>
+  <sub>Feito para quem quer criar APIs em PHP sem framework pesado.</sub>
 </p>
