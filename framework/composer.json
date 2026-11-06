@@ -1,0 +1,25 @@
+{
+  "name": "performatic/framework",
+  "description": "Core do Performatic PHP — framework procedural com motor Rust",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.5",
+    "ext-json": "*",
+    "ext-pdo": "*",
+    "ext-curl": "*",
+    "ext-mbstring": "*",
+    "firebase/php-jwt": "^7.2"
+  },
+  "autoload": {
+    "files": ["src/bootstrap.php"]
+  },
+  "authors": [
+    {
+      "name": "Hugo Felipe",
+      "homepage": "https://github.com/withvisionstack"
+    }
+  ]
+}
+
+

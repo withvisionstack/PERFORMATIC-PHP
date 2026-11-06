@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2014e3567e3dfeaf503c9a1e50c86a08",
+    "content-hash": "5a7e19f1b129bacbd28540b8d0104dd7",
     "packages": [
         {
             "name": "firebase/php-jwt",
@@ -79,15 +79,54 @@
                 "source": "https://github.com/googleapis/php-jwt/tree/v7.2.1"
             },
             "time": "2026-09-28T17:51:46+00:00"
+        },
+        {
+            "name": "performatic/framework",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "./framework",
+                "reference": "3c99cd0114beea926986b974258b961df379c952"
+            },
+            "require": {
+                "ext-curl": "*",
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "ext-pdo": "*",
+                "firebase/php-jwt": "^7.2",
+                "php": ">=8.5"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "src/bootstrap.php"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Hugo Felipe",
+                    "homepage": "https://github.com/withvisionstack"
+                }
+            ],
+            "description": "Core do Performatic PHP — framework procedural com motor Rust",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         }
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "stability-flags": {},
-    "prefer-stable": false,
+    "prefer-stable": true,
     "prefer-lowest": false,
-    "platform": {},
+    "platform": {
+        "php": ">=8.5"
+    },
     "platform-dev": {},
     "plugin-api-version": "2.9.0"
 }

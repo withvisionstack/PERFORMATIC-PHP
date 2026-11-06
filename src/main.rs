@@ -20,6 +20,21 @@ use types::{AppState, Job, RouteDef, SchemaDef, SecuritySchemeDef};
 
 
 fn main() {
+
+
+  // ─── Hot reload supervisor ───
+      let args: Vec<String> = std::env::args().collect();
+      let watch = args.iter().any(|a| a == "--watch" || a == "-w");
+      if watch && std::env::var("PERFORMATIC_CHILD").is_err() {
+          run_supervisor();
+          return;
+      }
+      if std::env::var("PERFORMATIC_CHILD").is_ok() {
+          spawn_watcher();
+      }
+      // ─── fim do hot reload ───
+
+
     //let cwd = std::env::current_dir().expect("cwd");
     //std::env::set_var("PHPRC", cwd.join("php.ini"));
     //std::env::set_var("PHP_INI_SCAN_DIR", "");   // ← NOVO: não escaneia conf.d
@@ -262,4 +277,57 @@ fn main() {
 
 
 
+}
+
+
+fn run_supervisor() {
+    let exe = std::env::current_exe().expect("current_exe");
+    loop {
+        eprintln!("\x1b[33m🔄 Iniciando servidor...\x1b[0m");
+        let mut child = std::process::Command::new(&exe)
+            .env("PERFORMATIC_CHILD", "1")
+            .spawn()
+            .expect("spawn child");
+        let status = child.wait().expect("wait child");
+
+        if status.code() == Some(42) {
+            eprintln!("\x1b[33m🔄 PHP alterado, reiniciando...\x1b[0m\n");
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            continue;
+        }
+        if !status.success() {
+            eprintln!("\x1b[31m✗ Servidor morreu com código {:?}, saindo\x1b[0m", status.code());
+        }
+        break;
+    }
+}
+
+fn spawn_watcher() {
+    use notify::{recommended_watcher, RecursiveMode, Watcher};
+
+    std::thread::spawn(|| {
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        // notify 6.x: recommended_watcher recebe um CALLBACK, não (tx, duration)
+        let mut w = match recommended_watcher(move |res| {
+            let _ = tx.send(res);
+        }) {
+            Ok(w) => w,
+            Err(_) => return,
+        };
+
+        if w.watch(std::path::Path::new("api"), RecursiveMode::Recursive).is_err() {
+            return;
+        }
+
+        for res in rx {
+            if let Ok(event) = res {
+                if event.paths.iter().any(|p| {
+                    p.extension().map_or(false, |e| e == "php")
+                }) {
+                    std::process::exit(42);
+                }
+            }
+        }
+    });
 }

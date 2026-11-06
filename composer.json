@@ -1,10 +1,24 @@
 {
+    "name": "meu/projeto",
+    "type": "project",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "./framework",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "require": {
-        "php": ">=8.4",
-        "ext-mbstring": "*",
-        "ext-pdo": "*",
-        "ext-json": "*",
-        "ext-curl": "*",
-        "firebase/php-jwt": "^7.2"
+        "php": ">=8.5",
+        "performatic/framework": "*"
+    },
+    "scripts": {
+        "build": "cargo build --release",
+        "serve": "./target/release/php-server --watch",
+        "dev": ["@build", "@serve"]
     }
 }

@@ -1,0 +1,26 @@
+#!/usr/bin/env php
+<?php
+$cmd = $argv[1] ?? 'serve';
+$bin = __DIR__ . '/../target/release/php-server';
+
+if (!file_exists($bin)) {
+    fwrite(STDERR, "\033[31m✗ Binário não encontrado. Rode: cargo build --release\033[0m\n");
+    exit(1);
+}
+
+switch ($cmd) {
+    case 'serve':
+    case 'run':
+    case 'dev':
+        passthru(escapeshellarg($bin) . ' --watch');
+        break;
+    case 'build':
+        passthru('cargo build --release');
+        break;
+    case 'version':
+        echo "Performatic PHP v1.0\n";
+        break;
+    default:
+        fwrite(STDERR, "Uso: php bin/performatic [serve|build|version]\n");
+        exit(1);
+}

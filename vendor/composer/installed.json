@@ -76,8 +76,48 @@
                 "source": "https://github.com/googleapis/php-jwt/tree/v7.2.1"
             },
             "install-path": "../firebase/php-jwt"
+        },
+        {
+            "name": "performatic/framework",
+            "version": "dev-main",
+            "version_normalized": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "./framework",
+                "reference": "3c99cd0114beea926986b974258b961df379c952"
+            },
+            "require": {
+                "ext-curl": "*",
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "ext-pdo": "*",
+                "firebase/php-jwt": "^7.2",
+                "php": ">=8.5"
+            },
+            "type": "library",
+            "installation-source": "dist",
+            "autoload": {
+                "files": [
+                    "src/bootstrap.php"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Hugo Felipe",
+                    "homepage": "https://github.com/withvisionstack"
+                }
+            ],
+            "description": "Core do Performatic PHP — framework procedural com motor Rust",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            },
+            "install-path": "../performatic/framework"
         }
     ],
-    "dev": false,
+    "dev": true,
     "dev-package-names": []
 }

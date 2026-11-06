@@ -2,7 +2,11 @@
 /target
 Cargo.lock.bak
 
-# Variáveis de ambiente (NUNCA commitar)
+# Composer
+/vendor
+composer.phar
+
+# Env
 .env
 .env.local
 .env.*.local
@@ -11,21 +15,17 @@ Cargo.lock.bak
 /storage/*
 !/storage/.gitkeep
 
+# Backups locais
+*.backup
+*.bak
+api/.backup/
+
 # Logs
 *.log
-*.pid
 
 # IDE
 .idea/
 .vscode/
-*.swp
-*~
-GET
-Accept:
-User-Agent:
-Host:
-build.log
 
 # OS
 .DS_Store
-Thumbs.db

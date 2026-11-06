@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/attributes.php';
 
 #[Schema('Usuario', [
     'id'        => 'int',
