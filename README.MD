@@ -72,7 +72,7 @@ O `install.sh` instala PHP, Rust, dependências do sistema, cria `.env` e compil
 - PHP 8.5.x com `php-dev`, `php-curl`, `php-pgsql` (ou `php-mysql`)
 - `libclang-dev`, `build-essential`, `pkg-config`
 
-___NOTA: "Windows → use WSL2 ou Docker Desktop. Build nativo no Windows não é suportado."
+___NOTA: Windows → use WSL2 com Ubuntu usando sua IDE Vscode ou JetBrains PHPStorm ou outra para codar ou Docker Desktop. Build nativo no Windows não é suportado.
 
 ---
 
