@@ -1,5 +1,4 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Performatic PHP" width="400">
   <img src="assets/performatic.png" alt="Performatic PHP" width="400">
   <img src="Performatic_PHP_generation_doc_API.png" alt="Performatic PHP" width="400">
   <img src="CLI_Application.png" alt="Performatic PHP" width="400">
