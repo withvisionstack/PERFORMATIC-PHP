@@ -19,8 +19,15 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 WORKDIR /app
 
+# ====================================================
+# STAGE 1 — BUILDER
+# ====================================================
+
 # ---- PHP deps via composer ----
+# IMPORTANTE: o composer.json usa path repository "./framework",
+# então a pasta precisa existir ANTES do composer install.
 COPY composer.json composer.lock ./
+COPY framework ./framework
 
 # Variáveis que evitam o composer travar em container
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
@@ -37,6 +44,7 @@ RUN set -eux; \
     echo "=== /app/vendor ==="; \
     ls -la /app/vendor; \
     test -f /app/vendor/autoload.php; \
+    test -L /app/vendor/performatic/framework || test -d /app/vendor/performatic/framework; \
     echo "=== composer OK ==="
 
 # ---- Rust + código PHP ----
@@ -44,7 +52,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY api ./api
 COPY app ./app
-
+COPY php.ini ./
 
 RUN cargo build --release
 
@@ -64,22 +72,26 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y \
         libphp8.5-embed php8.5-curl php8.5-pgsql php8.5-mbstring \
         libpq5 ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Binário
+# Binário Rust (motor)
 COPY --from=builder /app/target/release/php-server .
 
-# Código PHP
+# Código PHP do usuário
 COPY --from=builder /app/api ./api
 COPY --from=builder /app/app ./app
+COPY --from=builder /app/php.ini .
 
-
-# Vendor do composer + composer.json/lock
+# Vendor do composer (já contém o framework via symlink ou cópia)
 COPY --from=builder /app/vendor ./vendor
 COPY --from=builder /app/composer.json .
 COPY --from=builder /app/composer.lock .
+
+# IMPORTANTE: o vendor/performatic/framework pode ser um symlink relativo
+# para ../../framework/. Sem copiar framework/, o symlink quebra no runtime.
+COPY --from=builder /app/framework ./framework
 
 # Storage
 RUN mkdir -p storage && chmod 755 storage

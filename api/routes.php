@@ -21,7 +21,7 @@ function health(): string
 #[Post('/produtos',
     summary: 'Cria produto',
     tags: ['produtos'])]
-#[Body('ProdutoRequest', example: ['nome' => 'Caneta', 'preco' => 2.50])]
+#[Body('ProdutoRequest', example: ['nome' => 'Carro', 'preco' => 15.000])]
 #[Response(201, 'Criado')]
 #[Response(400, 'Dados inválidos')]
 function criar_produto(): string

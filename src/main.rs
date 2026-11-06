@@ -77,7 +77,7 @@ fn main() {
     };
 
     println!(
-        "📋 {} rotas, {} schemas, {} schemes",
+        " {} rotas, {} schemas, {} schemes",
         routes.len(),
         schemas.len(),
         security_schemes.len()
@@ -93,7 +93,7 @@ fn main() {
         .spawn(move || {
             Embed::run(AssertUnwindSafe(move || {
                 Embed::run_script("api/routes.php").expect("routes.php (worker)");
-                eprintln!("✅ PHP worker pronto");
+                eprintln!(" PHP worker pronto");
 
                 while let Some(job) = php_rx.blocking_recv() {
                     let is_multipart = job.headers.iter().any(|(k, v)| {
@@ -239,7 +239,7 @@ fn main() {
         let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
             .await
             .unwrap();
-        println!("🚀 Servidor ouvindo em http://localhost:{}", port);
+        println!(" Servidor ouvindo em http://localhost:{}", port);
 
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
@@ -283,7 +283,7 @@ fn main() {
 fn run_supervisor() {
     let exe = std::env::current_exe().expect("current_exe");
     loop {
-        eprintln!("\x1b[33m🔄 Iniciando servidor...\x1b[0m");
+        eprintln!("\x1b[33m Iniciando servidor...\x1b[0m");
         let mut child = std::process::Command::new(&exe)
             .env("PERFORMATIC_CHILD", "1")
             .spawn()
@@ -291,7 +291,7 @@ fn run_supervisor() {
         let status = child.wait().expect("wait child");
 
         if status.code() == Some(42) {
-            eprintln!("\x1b[33m🔄 PHP alterado, reiniciando...\x1b[0m\n");
+            eprintln!("\x1b[33m PHP alterado, reiniciando...\x1b[0m\n");
             std::thread::sleep(std::time::Duration::from_millis(200));
             continue;
         }

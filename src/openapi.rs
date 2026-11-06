@@ -174,7 +174,7 @@ pub fn build_openapi(
         "openapi": "3.0.0",
         "info": {
             "title": "Performatic PHP",
-            "version": "1.0.0"
+            "version": "1.1.0"
         },
         "paths": paths,
     });

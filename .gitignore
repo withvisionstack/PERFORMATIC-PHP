@@ -29,3 +29,5 @@ api/.backup/
 
 # OS
 .DS_Store
+vendor/
+composer.phar

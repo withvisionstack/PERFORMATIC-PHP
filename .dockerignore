@@ -1,10 +1,8 @@
 target/
-vendor/
 .env
-.env.local
+vendor/
 storage/*
 *.log
 .git/
 .idea/
 .vscode/
-build.log
