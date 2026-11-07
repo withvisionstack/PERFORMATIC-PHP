@@ -1,3 +1,0 @@
-Build e roda
-cargo build --release
-./target/release/php-server
