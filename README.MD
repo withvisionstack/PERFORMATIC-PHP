@@ -84,17 +84,21 @@ O Rust recebe a conexão, resolve a rota a partir dos atributos PHP e executa su
 > Como o worker é **persistente**, leia a seção [Segurança e estado do worker](#️-segurança-e-estado-do-worker) antes de ir para produção.
 
 ---
-
 ## Instalação
 
 ### Docker (recomendado)
-
-```bash
 git clone https://github.com/withvisionstack/PERFORMATIC-PHP meu-projeto
 cd meu-projeto
 cp .env.example .env
-docker compose up -d --build
-```
+docker compose up -d
+curl http://localhost:8000/health
+
+### Local (dev)
+git clone ...
+cd meu-projeto
+./install.sh
+cargo build --release
+php bin/performatic serve
 
 Teste:
 
