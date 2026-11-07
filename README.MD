@@ -160,7 +160,7 @@ sudo apt install libphp8.5-embed
 Ela é necessária em dois momentos:
 
 - **Compilar** (`cargo build` / `cargo run`): o Rust faz o link com `libphp.so`.
-- **Rodar o binário: o PHP é carregado em tempo de execução.
+- **Rodar o binário** : o PHP é carregado em tempo de execução.
 
 Se aparecer `libphp.so not found`, veja o [Troubleshooting](#troubleshooting). O `install.sh` e o Docker já cuidam disso para você.
 
