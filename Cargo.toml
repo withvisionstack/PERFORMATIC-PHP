@@ -17,3 +17,9 @@ notify = "6"
 
 [toolchain]
 channel = "1.99"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+repository = "https://github.com/withvisionstack/PERFORMATIC-PHP"

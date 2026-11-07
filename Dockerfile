@@ -3,7 +3,6 @@
 # ====================================================
 FROM rust:1.99-bookworm AS builder
 
-# PHP 8.5 via sury.org (sem composer do apt — vamos instalar o oficial)
 RUN apt-get update && apt-get install -y \
     curl ca-certificates apt-transport-https lsb-release gnupg \
     && curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
@@ -13,23 +12,14 @@ RUN apt-get update && apt-get install -y \
         libclang-dev build-essential pkg-config unzip zip git \
     && rm -rf /var/lib/apt/lists/*
 
-# Composer OFICIAL (não o do apt). Instalador sempre pega o mais recente.
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && composer --version
 
 WORKDIR /app
 
-# ====================================================
-# STAGE 1 — BUILDER
-# ====================================================
-
-# ---- PHP deps via composer ----
-# IMPORTANTE: o composer.json usa path repository "./framework",
-# então a pasta precisa existir ANTES do composer install.
+# ---- PHP deps via composer (do Packagist) ----
 COPY composer.json composer.lock ./
-COPY framework ./framework
 
-# Variáveis que evitam o composer travar em container
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_NO_INTERACTION=1 \
     COMPOSER_MEMORY_LIMIT=-1
@@ -44,7 +34,8 @@ RUN set -eux; \
     echo "=== /app/vendor ==="; \
     ls -la /app/vendor; \
     test -f /app/vendor/autoload.php; \
-    test -L /app/vendor/performatic/framework || test -d /app/vendor/performatic/framework; \
+    test -d /app/vendor/withvisionstack/performatic-framework; \
+    test -f /app/vendor/withvisionstack/performatic-framework/src/bootstrap.php; \
     echo "=== composer OK ==="
 
 # ---- Rust + código PHP ----
@@ -56,7 +47,6 @@ COPY php.ini ./
 
 RUN cargo build --release
 
-# Diagnóstico
 RUN echo "=== libphp ===" && ls -la /usr/lib/libphp*.so* 2>/dev/null
 
 # ====================================================
@@ -64,7 +54,6 @@ RUN echo "=== libphp ===" && ls -la /usr/lib/libphp*.so* 2>/dev/null
 # ====================================================
 FROM debian:bookworm-slim
 
-# Runtime
 RUN apt-get update && apt-get install -y \
     curl ca-certificates apt-transport-https lsb-release gnupg \
     && curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg \
@@ -76,24 +65,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Binário Rust (motor)
 COPY --from=builder /app/target/release/php-server .
-
-# Código PHP do usuário
 COPY --from=builder /app/api ./api
 COPY --from=builder /app/app ./app
 COPY --from=builder /app/php.ini .
-
-# Vendor do composer (já contém o framework via symlink ou cópia)
 COPY --from=builder /app/vendor ./vendor
 COPY --from=builder /app/composer.json .
 COPY --from=builder /app/composer.lock .
 
-# IMPORTANTE: o vendor/performatic/framework pode ser um symlink relativo
-# para ../../framework/. Sem copiar framework/, o symlink quebra no runtime.
-COPY --from=builder /app/framework ./framework
-
-# Storage
 RUN mkdir -p storage && chmod 755 storage
 
 EXPOSE 7600
