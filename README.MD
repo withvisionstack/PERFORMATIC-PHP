@@ -135,9 +135,9 @@ cargo run --release
 
 O `install.sh` instala PHP, Rust e dependências do sistema, cria o `.env` e compila.
 
-### Binários pré-compilados (GitHub Actions)
+### Binário pré-compilado 
 
-O projeto inclui o motor em Rust, e o **GitHub Actions gera os binários para as plataformas suportadas** a cada release. Baixe o binário na aba [Releases](https://github.com/withvisionstack/PERFORMATIC-PHP/releases) se não quiser compilar.
+O projeto inclui o motor em Rust. Baixe o binário na aba [Releases](https://github.com/withvisionstack/PERFORMATIC-PHP/releases) se não quiser compilar.
 
 > ⚠️ Mesmo com o binário pronto, o servidor precisa da biblioteca `libphp` instalada (veja abaixo).
 
