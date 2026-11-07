@@ -86,20 +86,35 @@ O Rust recebe a conexão, resolve a rota a partir dos atributos PHP e executa su
 ---
 ## Instalação
 
-### Docker (recomendado)
-git clone https://github.com/withvisionstack/PERFORMATIC-PHP meu-projeto
-cd meu-projeto
-cp .env.example .env
-docker compose up -d
-curl http://localhost:8000/health
+### Requisitos
+- Docker 24+ e Docker Compose v2
+- (Windows) WSL2 + Docker Desktop
 
-### Local (dev)
-git clone ...
-cd meu-projeto
-./install.sh
-cargo build --release
-php bin/performatic serve
+### Passos
+1. Clone:
+   git clone https://github.com/withvisionstack/PERFORMATIC-PHP meu-projeto
+   cd meu-projeto
 
+2. Configure:
+   cp .env.example .env
+   # Edite .env:
+   #   DB_DSN=pgsql:host=postgres;dbname=performatic
+   #   JWT_SECRET=<openssl rand -hex 32>
+
+3. Suba:
+   docker compose up -d
+
+4. Teste:
+   curl http://localhost:8000/health
+   # {"ok":true,"ts":...}
+
+5. Edite suas rotas em `api/routes.php`. Para aplicar:
+   docker compose restart api
+
+## Endpoints prontos
+- http://localhost:8000/health — health check
+- http://localhost:8000/docs — Swagger UI
+- http://localhost:8000/produtos — CRUD de exemplo
 Teste:
 
 ```bash
