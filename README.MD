@@ -116,13 +116,34 @@ cargo run --release
 
 O `install.sh` instala PHP, Rust e dependências do sistema, cria o `.env` e compila.
 
+### Binários pré-compilados (GitHub Actions)
+
+O projeto inclui o motor em Rust, e o **GitHub Actions gera os binários para as plataformas suportadas** a cada release. Baixe o binário na aba [Releases](https://github.com/withvisionstack/PERFORMATIC-PHP/releases) se não quiser compilar.
+
+> ⚠️ Mesmo com o binário pronto, o servidor precisa da biblioteca `libphp` instalada (veja abaixo).
+
 ### Requisitos (instalação manual)
 
 - Linux (Ubuntu 22.04+ ou Debian 12+)
 - Rust (versão indicada no `Cargo.toml`)
 - PHP 8.5 com `php-dev`, `php-curl` e `php-pgsql` (ou `php-mysql`)
 - `libclang-dev`, `build-essential`, `pkg-config`
-- Windows e oficialmente não suportado somente via WSL2/Ubuntu 
+- **`libphp8.5-embed`** (essencial, veja abaixo)
+
+#### ⚠️ `libphp8.5-embed` é obrigatório
+
+O motor em Rust embute o PHP via `libphp`. Sem essa biblioteca, o projeto **não compila** e o binário **não executa**.
+
+```bash
+sudo apt install libphp8.5-embed
+```
+
+Ela é necessária em dois momentos:
+
+- **Compilar** (`cargo build` / `cargo run`): o Rust faz o link com `libphp.so`.
+- **Rodar os binários** gerados pelo GitHub Actions: o PHP é carregado em tempo de execução.
+
+Se aparecer `libphp.so not found`, veja o [Troubleshooting](#troubleshooting). O `install.sh` e o Docker já cuidam disso para você.
 
 ---
 
