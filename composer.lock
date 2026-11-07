@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5a7e19f1b129bacbd28540b8d0104dd7",
+    "content-hash": "2de1c9227b363b9a487ad956bb455a3d",
     "packages": [
         {
             "name": "firebase/php-jwt",
@@ -81,12 +81,18 @@
             "time": "2026-09-28T17:51:46+00:00"
         },
         {
-            "name": "performatic/framework",
-            "version": "dev-main",
+            "name": "withvisionstack/performatic-framework",
+            "version": "v1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/withvisionstack/performatic-framework.git",
+                "reference": "ef2eebcaf3370abb20d882798c3a0f436cb32605"
+            },
             "dist": {
-                "type": "path",
-                "url": "./framework",
-                "reference": "3c99cd0114beea926986b974258b961df379c952"
+                "type": "zip",
+                "url": "https://api.github.com/repos/withvisionstack/performatic-framework/zipball/ef2eebcaf3370abb20d882798c3a0f436cb32605",
+                "reference": "ef2eebcaf3370abb20d882798c3a0f436cb32605",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -102,27 +108,30 @@
                     "src/bootstrap.php"
                 ]
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
-            "authors": [
-                {
-                    "name": "Hugo Felipe",
-                    "homepage": "https://github.com/withvisionstack"
-                }
+            "description": "Framework PHP procedural com motor Rust — API sem Laravel, validação declarativa, OpenAPI automático",
+            "keywords": [
+                "api",
+                "framework",
+                "openapi",
+                "php",
+                "rust"
             ],
-            "description": "Core do Performatic PHP — framework procedural com motor Rust",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/withvisionstack/performatic-framework/issues",
+                "source": "https://github.com/withvisionstack/performatic-framework/tree/v1.1.0"
+            },
+            "time": "2026-11-07T04:04:25+00:00"
         }
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "stability-flags": {},
-    "prefer-stable": true,
+    "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
         "php": ">=8.5"

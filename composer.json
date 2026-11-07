@@ -1,20 +1,9 @@
 {
-    "name": "meu/projeto",
+    "name": "withvisionstack/performatic-app",
     "type": "project",
-    "minimum-stability": "dev",
-    "prefer-stable": true,
-    "repositories": [
-        {
-            "type": "path",
-            "url": "./framework",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
     "require": {
         "php": ">=8.5",
-        "performatic/framework": "*"
+        "withvisionstack/performatic-framework": "^1.1.0"
     },
     "scripts": {
         "build": "cargo build --release",
