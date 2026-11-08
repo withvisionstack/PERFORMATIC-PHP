@@ -18,7 +18,7 @@ switch ($cmd) {
         passthru('cargo build --release');
         break;
     case 'version':
-        echo "Performatic PHP v1.1\n";
+        echo "Performatic PHP v1.3.0\n";
         break;
     default:
         fwrite(STDERR, "Uso: php bin/performatic [serve|build|version]\n");
