@@ -1,0 +1,15 @@
+Performatic PHP v1.2.8 — Linux x64
+
+⚠️  DEPENDÊNCIA OBRIGATÓRIA:
+    sudo apt install libphp8.5-embed
+
+INSTALAÇÃO:
+    tar -xzf performatic-linux-x64.tar.gz
+    chmod +x performatic
+    ./performatic serve
+
+O binário espera encontrar `api/routes.php` no diretório atual.
+Para criar um projeto novo:
+    composer require withvisionstack/performatic-framework
+    mkdir api && echo '<?php require __DIR__."/../vendor/autoload.php";' > api/routes.php
+    ./performatic serve
