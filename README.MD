@@ -625,6 +625,25 @@ Benchmarks em VPS de 4 vCPU / 4 GB, Docker Compose (Nginx + PostgreSQL 16), medi
 | `GET /produtos` (DB) | ~300 req/s | 156 ms | 1,21 s |
 | `POST /produtos` (DB + validação) | ~300 req/s | 133 ms | 403 ms |
 
+
+### Pos otimização em tempo real colocado a prova ubuntu server lts 24.04 taxa de banda 100MB Internet
+
+## Benchmark de produção (VPS 2 vCPU, Docker Postgres, 1 worker)
+
+Teste: 5 rodadas de 60s consecutivas, POST /produtos (INSERT + validação)
+
+| Rodada | Throughput | Memória RSS |
+| :--- | :--- | :--- |
+| 1 | ~995 req/s | 42.19 MB |
+| 2 | ~995 req/s | 42.74 MB |
+| 3 | ~995 req/s | 41.66 MB |
+| 4 | ~995 req/s | 42.26 MB |
+| 5 | ~995 req/s | 42.15 MB |
+
+**Memória estabilizou em ~42 MB** após 5 minutos de carga contínua.
+`worker_request_shutdown` + `malloc_trim(0)` a cada 5.000 requests
+devolve o RSS ao OS sem matar o processo.
+
 O overhead de ~5× em relação ao host vem da bridge do Docker e dos dois saltos de rede. A latência alta reflete o **modelo serial de um único worker**: cada request espera a anterior terminar. Escalar workers resolve isso.
 
 ### Escalando com N workers
