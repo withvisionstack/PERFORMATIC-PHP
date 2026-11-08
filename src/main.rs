@@ -95,11 +95,25 @@ fn main() {
                 Embed::run_script("api/routes.php").expect("routes.php (worker)");
                 eprintln!(" PHP worker pronto");
 
+
+            let mut request_count: u64 = 0;
+            const MAX_REQUESTS_PER_WORKER: u64 = 500;
+
+
+
+
                 while let Some(job) = php_rx.blocking_recv() {
+                        request_count += 1;
+
                     let is_multipart = job.headers.iter().any(|(k, v)| {
                         k.eq_ignore_ascii_case("content-type")
                             && v.to_lowercase().contains("multipart/form-data")
                     });
+
+                     if request_count >= MAX_REQUESTS_PER_WORKER {
+                            eprintln!("♻️  Worker reciclando após {} requests", request_count);
+                            std::process::exit(42);
+                        }
 
                     let multipart_call = if is_multipart {
                         "multipart_parse(); "

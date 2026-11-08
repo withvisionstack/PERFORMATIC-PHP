@@ -20,6 +20,10 @@ services:
   api:
     build: .
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
     depends_on:
       postgres:
         condition: service_healthy
