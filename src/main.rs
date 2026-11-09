@@ -6,16 +6,51 @@ mod types;
 
 use axum::{routing::get, Router};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use ext_php_rs::embed::Embed;
+use ext_php_rs::embed::{
+    worker_request_shutdown, worker_request_startup, worker_reset_superglobals, Embed,
+};
 use std::panic::AssertUnwindSafe;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tower_http::services::ServeDir;
 
 use dispatch::dispatch;
 use openapi::{docs_html, docs_json};
 use types::{AppState, Job, RouteDef, SchemaDef, SecuritySchemeDef};
+
+/*
+   NOTAS PARA USO EM PRODUCAO :
+
+---Tráfego médio: Reciclo (a cada 100k requests)
+---Pico de memória
+---1 req/s	~28 horas	~35 MB
+---10 req/s	~2,8 horas	~90 MB
+---100 req/s ~17 minutos ~90 MB
+
+---Base: ~33,5 MB.
+---Crescimento: ~0,5 KB por request.
+---Pico: ~85–90 MB a 100k requests
+
+---NTS EXT_PHP_RS AGUARDAR PROXIMA VERSAO DA LINGUAGEM OU ATUALIZACOES
+
+
+---NOTA : 2 workers como taxa minima atrás do Nginx, mesmo com pouco tráfego
+
+*/
+
+
+
+
+/// Marcado pela thread do PHP quando o limite de reciclo é atingido.
+/// O servidor então para de aceitar conexões, drena as requisições em andamento
+/// e o processo sai com código 0 (o systemd/Docker sobe um novo).
+static RECYCLE_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Se a drenagem demorar mais que isso (ex.: cliente keep-alive travado),
+/// o processo sai mesmo assim, para a memória não crescer indefinidamente.
+const RECYCLE_DRAIN_TIMEOUT_SECS: u64 = 10;
 
 
 
@@ -88,6 +123,10 @@ fn main() {
     // ---------------------------------------------------------------------
     let (php_tx, mut php_rx) = mpsc::channel::<Job>(10000);
 
+    // Avisa o servidor HTTP que o worker PHP pediu reciclo gracioso
+    let recycle_notify = Arc::new(Notify::new());
+    let worker_notify = recycle_notify.clone();
+
     thread::Builder::new()
         .stack_size(8 * 1024 * 1024)
         .spawn(move || {
@@ -96,24 +135,21 @@ fn main() {
                 eprintln!(" PHP worker pronto");
 
 
-            let mut request_count: u64 = 0;
-            const MAX_REQUESTS_PER_WORKER: u64 = 500;
+            let mut count: u64 = 0;
+            const RESET_STATE: u64 = 5_000;        // reset in-process a cada 5k
+            // O heap do PHP cresce ~0,5 KB/request e o reset in-process não o libera
+            // (medido com /__mem). O reciclo de processo é quem limita a memória:
+            // 100k requests ≈ +50 MB (RSS ~90–100 MB, bem abaixo do limite de 512 MB).
+            const RECYCLE_PROCESS: u64 = 100_000;  // mata processo a cada 100k
 
 
 
 
                 while let Some(job) = php_rx.blocking_recv() {
-                        request_count += 1;
-
                     let is_multipart = job.headers.iter().any(|(k, v)| {
                         k.eq_ignore_ascii_case("content-type")
                             && v.to_lowercase().contains("multipart/form-data")
                     });
-
-                     if request_count >= MAX_REQUESTS_PER_WORKER {
-                            eprintln!("♻️  Worker reciclando após {} requests", request_count);
-                            std::process::exit(42);
-                        }
 
                     let multipart_call = if is_multipart {
                         "multipart_parse(); "
@@ -214,6 +250,50 @@ fn main() {
                     };
 
                     let _ = job.respond_to.send(result);
+
+                    count += 1;
+                    if count % 1000 == 0 {
+                        eprintln!("COUNT={}", count);
+                    }
+                    if count % RESET_STATE == 0 {
+                        eprintln!("♻️  Worker reset in-process após {} requests", count);
+                        // Reset de estado (limpa superglobais, memória PHP)
+                        worker_request_shutdown();
+                        worker_request_startup().expect("startup");
+                        worker_reset_superglobals();
+                        if let Ok(z) = Embed::eval("memory_get_usage(true);") {
+                            eprintln!("   PHP heap após reset: {:?}", z.long());
+                        }
+
+                        // Tenta liberar RSS
+                        #[cfg(target_os = "linux")]
+                        unsafe {
+                            extern "C" {
+                                fn malloc_trim(pad: usize) -> i32;
+                            }
+                            malloc_trim(0);
+                        }
+                    }
+
+                    // Reciclo gracioso: NÃO mata o processo na hora. Pede ao servidor
+                    // para parar de aceitar conexões e terminar as requisições em
+                    // andamento (este loop continua atendendo a fila até lá).
+                    if count >= RECYCLE_PROCESS && !RECYCLE_REQUESTED.swap(true, Ordering::SeqCst) {
+                        eprintln!(
+                            "♻️  Reciclo gracioso após {} requests: drenando requisições em andamento...",
+                            count
+                        );
+                        worker_notify.notify_one();
+
+                        // Rede de segurança: se a drenagem travar, sai mesmo assim
+                        std::thread::spawn(|| {
+                            std::thread::sleep(std::time::Duration::from_secs(
+                                RECYCLE_DRAIN_TIMEOUT_SECS,
+                            ));
+                            eprintln!("♻️  Drenagem excedeu {}s, encerrando", RECYCLE_DRAIN_TIMEOUT_SECS);
+                            std::process::exit(0);
+                        });
+                    }
                 }
             }));
         })
@@ -256,14 +336,24 @@ fn main() {
         println!(" Servidor ouvindo em http://localhost:{}", port);
 
         axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
+            .with_graceful_shutdown(shutdown_signal(recycle_notify))
             .await
             .unwrap();
 
         println!("\x1b[32m✓ Servidor encerrado graciosamente\x1b[0m");
     });
 
-    async fn shutdown_signal() {
+    // Fim do servidor. Em reciclo gracioso, sai com 0 (systemd/Docker reiniciam).
+    // Em modo --watch, o supervisor só reinicia com código 42.
+    if RECYCLE_REQUESTED.load(Ordering::SeqCst) {
+        eprintln!("♻️  Reciclo concluído, saindo para reiniciar");
+        if std::env::var("PERFORMATIC_CHILD").is_ok() {
+            std::process::exit(42);
+        }
+        std::process::exit(0);
+    }
+
+    async fn shutdown_signal(recycle: Arc<Notify>) {
         let ctrl_c = async {
             tokio::signal::ctrl_c()
                 .await
@@ -284,9 +374,12 @@ fn main() {
         tokio::select! {
             _ = ctrl_c => {},
             _ = terminate => {},
+            _ = recycle.notified() => {},
         }
 
-        eprintln!("\n\x1b[33m⚠ Sinal de shutdown recebido. Aguardando requisições em andamento...\x1b[0m");
+        if !RECYCLE_REQUESTED.load(Ordering::SeqCst) {
+            eprintln!("\n\x1b[33m⚠ Sinal de shutdown recebido. Aguardando requisições em andamento...\x1b[0m");
+        }
     }
 
 

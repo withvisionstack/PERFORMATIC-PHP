@@ -23,6 +23,7 @@ api/.backup/
 # Logs
 *.log
 
+
 # IDE
 .idea/
 .vscode/
@@ -31,3 +32,5 @@ api/.backup/
 .DS_Store
 vendor/
 composer.phar
+
+.'tafproject125bpm@email.com>ed 0 (from 0)'
