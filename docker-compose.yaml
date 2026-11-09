@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: performatic_logic
       POSTGRES_DB: performatic
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -43,7 +43,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8000:80"
+      - "8001:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
